@@ -50,8 +50,7 @@ export const VEHICULE_LABELS: Record<string, string> = {
 }
 
 export const COMMISSION_LABELS: Record<string, string> = {
-  FIXE: 'Fixe par colis',
-  POURCENTAGE: 'Pourcentage',
+  FIXE: 'Montant fixe par colis',
   AUCUNE: 'Aucune',
 }
 

@@ -13,7 +13,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { formatMontant, formatDateTime, formatDate } from '../lib/format'
 import { MOYEN_LABELS, STATUT_LABELS } from '../lib/labels'
 import { trouverLivreurPourVille, zonesInclude, parseZones } from '../lib/zones'
-import type { Colis, HistoriqueColis, Commentaire, Paiement, MoyenPaiement, Livreur } from '../types/db'
+import type { Colis, HistoriqueColis, Commentaire, Paiement, MoyenPaiement, Livreur, LigneColis } from '../types/db'
 
 export function ColisDetailPage() {
   const { id } = useParams()
@@ -34,12 +34,13 @@ export function ColisDetailPage() {
   const [affectLivreur, setAffectLivreur] = useState('')
   const [cancelMotif, setCancelMotif] = useState('')
   const [payForm, setPayForm] = useState({ montant: '', moyen: 'ESPECES' as MoyenPaiement, reference: '' })
+  const [lignes, setLignes] = useState<LigneColis[]>([])
 
   useEffect(() => { if (id) load() }, [id])
 
   async function load() {
     setLoading(true)
-    const [c, h, cm, p, l] = await Promise.all([
+    const [c, h, cm, p, l, li] = await Promise.all([
       supabase.from('colis').select(`*, client:client(*), destinataire:destinataire(*), livreur:livreur(*)`)
         .eq('id', id).maybeSingle(),
       supabase.from('historique_colis').select(`*, utilisateur:utilisateur(nom_complet)`)
@@ -48,12 +49,14 @@ export function ColisDetailPage() {
         .eq('colis_id', id).order('created_at', { ascending: false }),
       supabase.from('paiement').select('*').eq('colis_id', id).order('date_paiement', { ascending: false }),
       supabase.from('livreur').select('id,nom_complet,statut,zones,type_commission,valeur_commission').eq('supprime', false).order('nom_complet'),
+      supabase.from('ligne_colis').select('*').eq('colis_id', id).order('id'),
     ])
     setColis(c.data as unknown as Colis)
     setHistorique((h.data as HistoriqueColis[]) ?? [])
     setCommentaires((cm.data as Commentaire[]) ?? [])
     setPaiements((p.data as Paiement[]) ?? [])
     setLivreurs((l.data as Livreur[]) ?? [])
+    setLignes((li.data as LigneColis[]) ?? [])
     setLoading(false)
   }
 
@@ -81,13 +84,11 @@ export function ColisDetailPage() {
     })
     await logActivite(utilisateur, 'COLIS', 'COLIS_STATUS', { type: 'colis', id: colis.id }, { ancien, nouveau })
 
-    // Commission on delivery
+    // Commission on delivery (FIXE only)
     if (nouveau === 'LIVRE' && colis.livreur_id) {
       const liv = livreurs.find(l => l.id === colis.livreur_id)
-      if (liv && liv.type_commission !== 'AUCUNE') {
-        const montant = liv.type_commission === 'FIXE'
-          ? Number(liv.valeur_commission)
-          : Number(colis.montant) * Number(liv.valeur_commission) / 100
+      if (liv && liv.type_commission === 'FIXE') {
+        const montant = Number(liv.valeur_commission)
         if (montant > 0) {
           await supabase.from('commission_livreur').insert({
             livreur_id: liv.id, colis_id: colis.id, montant,
@@ -169,11 +170,15 @@ export function ColisDetailPage() {
   }
 
   const actions = []
-  if (colis.statut === 'RECU') actions.push({ label: 'Expédier', icon: Send, action: () => changerStatut('EXPEDIE'), cls: 'btn-secondary' })
-  if (colis.statut === 'EXPEDIE') actions.push({ label: 'Affecter / Mettre en livraison', icon: Truck, action: () => { const m = trouverLivreurPourVille(colis.ville_destination, livreurs); setAffectLivreur(m ? String(m.id) : ''); setShowAffect(true) }, cls: 'btn-secondary' })
-  if (colis.statut === 'EN_LIVRAISON') {
-    actions.push({ label: 'Marquer livré', icon: CheckCircle2, action: () => changerStatut('LIVRE'), cls: 'btn-primary' })
-    actions.push({ label: 'Retourné', icon: RotateCcw, action: () => changerStatut('RETOURNE'), cls: 'btn-danger' })
+  if (colis.retrait_comptoir) {
+    if (colis.statut === 'RECU') actions.push({ label: 'Marquer récupéré', icon: CheckCircle2, action: () => changerStatut('LIVRE'), cls: 'btn-primary' })
+  } else {
+    if (colis.statut === 'RECU') actions.push({ label: 'Expédier', icon: Send, action: () => changerStatut('EXPEDIE'), cls: 'btn-secondary' })
+    if (colis.statut === 'EXPEDIE') actions.push({ label: 'Affecter / Mettre en livraison', icon: Truck, action: () => { const m = trouverLivreurPourVille(colis.ville_destination, livreurs); setAffectLivreur(m ? String(m.id) : ''); setShowAffect(true) }, cls: 'btn-secondary' })
+    if (colis.statut === 'EN_LIVRAISON') {
+      actions.push({ label: 'Marquer livré', icon: CheckCircle2, action: () => changerStatut('LIVRE'), cls: 'btn-primary' })
+      actions.push({ label: 'Retourné', icon: RotateCcw, action: () => changerStatut('RETOURNE'), cls: 'btn-danger' })
+    }
   }
   if (colis.statut === 'RETOURNE' && isAdmin) actions.push({ label: 'Relivrer', icon: Send, action: () => changerStatut('RECU'), cls: 'btn-ghost' })
   if ((colis.statut === 'RECU' || colis.statut === 'EXPEDIE') && !verrou)
@@ -190,7 +195,7 @@ export function ColisDetailPage() {
               <h1 className="text-xl font-bold font-mono text-gold-500">{colis.code}</h1>
               <StatusBadge statut={colis.statut} />
               {colis.priorite === 'EXPRESS' && <span className="badge bg-gold-500/20 text-gold-500 border border-gold-500/40">Express</span>}
-              {colis.fragile && <span className="badge bg-warning-100/20 text-warning-300 border border-warning-500/30">Fragile</span>}
+              {colis.retrait_comptoir && <span className="badge bg-info-100/20 text-info-300 border border-info-500/30">Retrait comptoir</span>}
             </div>
             <p className="text-sm text-text-secondary mt-0.5">Reçu le {formatDateTime(colis.date_reception)}</p>
           </div>
@@ -266,12 +271,22 @@ export function ColisDetailPage() {
             <h3 className="text-sm font-semibold text-gold-500 mb-3">Colis</h3>
             <dl className="space-y-2 text-sm">
               <div><dt className="text-text-muted">Contenu</dt><dd>{colis.contenu}</dd></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><dt className="text-text-muted">Poids</dt><dd>{colis.poids} kg</dd></div>
-                <div><dt className="text-text-muted">Valeur déclarée</dt><dd>{formatMontant(colis.valeur_declaree)}</dd></div>
-              </div>
               <div><dt className="text-text-muted">Priorité</dt><dd>{colis.priorite === 'EXPRESS' ? 'Express' : 'Normale'}</dd></div>
-              <div><dt className="text-text-muted">Fragile</dt><dd>{colis.fragile ? 'Oui' : 'Non'}</dd></div>
+              {lignes.length > 0 && (
+                <div className="pt-2 border-t border-border mt-2">
+                  <dt className="text-text-muted mb-1.5">Articles ({lignes.length})</dt>
+                  <dd>
+                    <div className="space-y-1">
+                      {lignes.map(l => (
+                        <div key={l.id} className="flex justify-between text-xs">
+                          <span>{l.designation} <span className="text-text-muted">×{l.quantite}</span></span>
+                          <span className="font-mono text-gold-500">{formatMontant(l.montant)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </dd>
+                </div>
+              )}
             </dl>
           </div>
           <div className="card p-4">
@@ -280,7 +295,7 @@ export function ColisDetailPage() {
               <div><dt className="text-text-muted">Montant</dt><dd className="font-mono font-semibold text-gold-500">{formatMontant(colis.montant)}</dd></div>
               <div><dt className="text-text-muted">Payé</dt><dd className="font-mono">{formatMontant(colis.montant_paye)}</dd></div>
               <div><dt className="text-text-muted">Mode attendu</dt><dd>{MOYEN_LABELS[colis.mode_paiement_attendu]}</dd></div>
-              <div><dt className="text-text-muted">Livreur</dt><dd>{colis.livreur?.nom_complet ?? <span className="text-text-muted">Non affecté</span>}</dd></div>
+              <div><dt className="text-text-muted">Livreur</dt><dd>{colis.retrait_comptoir ? <span className="text-info-300">Retrait au comptoir</span> : (colis.livreur?.nom_complet ?? <span className="text-text-muted">Non affecté</span>)}</dd></div>
               {colis.notes_internes && <div><dt className="text-text-muted">Notes</dt><dd>{colis.notes_internes}</dd></div>}
             </dl>
           </div>

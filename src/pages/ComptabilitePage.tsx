@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, TrendingUp, TrendingDown, Wallet, BarChart3 } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, Wallet, BarChart3, LineChart as LineChartIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { logActivite, genererNumeroEcriture } from '../lib/audit'
@@ -90,6 +90,52 @@ export function ComptabilitePage() {
         <StatCard label="Charges" value={formatMontant(charges)} icon={TrendingDown} />
         <StatCard label="Bénéfice" value={formatMontant(benefice)} icon={Wallet} accent />
       </div>
+
+      {(() => {
+        const jours: { jour: string; entrees: number; sorties: number }[] = []
+        const map = new Map<string, { entrees: number; sorties: number }>()
+        rows.forEach(r => {
+          const d = new Date(r.date_ecriture)
+          const key = d.toISOString().slice(0, 10)
+          if (!map.has(key)) map.set(key, { entrees: 0, sorties: 0 })
+          const v = map.get(key)!
+          if (r.sens === 'ENTREE') v.entrees += Number(r.montant); else v.sorties += Number(r.montant)
+        })
+        const sorted = Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0])).slice(-14)
+        sorted.forEach(([key, v]) => {
+          const d = new Date(key)
+          jours.push({ jour: d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), entrees: v.entrees, sorties: v.sorties })
+        })
+        const maxVal = Math.max(...jours.map(j => Math.max(j.entrees, j.sorties)), 1)
+        if (jours.length === 0) return null
+        return (
+          <div className="card p-5 mb-4 animate-fadeIn">
+            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><LineChartIcon size={16} className="text-gold-500" /> Évolution des entrées / sorties (14 derniers jours)</h3>
+            <div className="flex items-end gap-1.5 h-44 relative">
+              {jours.map((j, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+                  <div className="flex-1 flex items-end gap-0.5 w-full justify-center">
+                    <div className="relative w-1/2 max-w-[14px] bg-success-500/20 rounded-t-sm overflow-hidden flex items-end">
+                      <div className="w-full bg-success-500 rounded-t-sm transition-all duration-500 group-hover:brightness-125" style={{ height: `${Math.max((j.entrees / maxVal) * 100, 2)}%` }} title={`Entrées: ${formatMontant(j.entrees)}`} />
+                    </div>
+                    <div className="relative w-1/2 max-w-[14px] bg-danger-500/20 rounded-t-sm overflow-hidden flex items-end">
+                      <div className="w-full bg-danger-500 rounded-t-sm transition-all duration-500 group-hover:brightness-125" style={{ height: `${Math.max((j.sorties / maxVal) * 100, 2)}%` }} title={`Sorties: ${formatMontant(j.sorties)}`} />
+                    </div>
+                  </div>
+                  <span className="text-[9px] text-text-muted">{j.jour}</span>
+                  <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition pointer-events-none bg-bg-elevated border border-border rounded-md px-2 py-1 text-[10px] whitespace-nowrap z-10 shadow-float">
+                    <span className="text-success-500">+{formatMontant(j.entrees)}</span> · <span className="text-danger-500">−{formatMontant(j.sorties)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-center gap-4 mt-3 text-xs text-text-muted">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-success-500 rounded-sm" /> Entrées</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-danger-500 rounded-sm" /> Sorties</span>
+            </div>
+          </div>
+        )
+      })()}
 
       <div className="flex gap-2 mb-4">
         {(['jour', 'semaine', 'mois', 'annee', 'tout'] as const).map(p => (

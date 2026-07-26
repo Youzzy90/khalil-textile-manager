@@ -9,18 +9,19 @@ import { Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { valideTelephone, formatDate, formatMontant } from '../lib/format'
 import { VEHICULE_LABELS, COMMISSION_LABELS, LIVREUR_STATUT_LABELS } from '../lib/labels'
+// plaque & date_embauche supprimés ; commission en montant fixe uniquement
 import { parseZones } from '../lib/zones'
 import type { Livreur, CommissionLivreur, Ville } from '../types/db'
 
 interface Row extends Livreur { en_cours: number; livres: number; commission_due: number; zoneList: string[] }
 
 type LivreurForm = {
-  nom_complet: string; telephone: string; type_vehicule: Livreur['type_vehicule']; plaque: string; zones: string[];
-  statut: Livreur['statut']; date_embauche: string; type_commission: Livreur['type_commission']; valeur_commission: string; notes: string;
+  nom_complet: string; telephone: string; type_vehicule: Livreur['type_vehicule']; zones: string[];
+  statut: Livreur['statut']; type_commission: Livreur['type_commission']; valeur_commission: string; notes: string;
 }
 const empty: LivreurForm = {
-  nom_complet: '', telephone: '', type_vehicule: 'MOTO', plaque: '', zones: [],
-  statut: 'ACTIF', date_embauche: '', type_commission: 'AUCUNE', valeur_commission: '0', notes: '',
+  nom_complet: '', telephone: '', type_vehicule: 'MOTO', zones: [],
+  statut: 'ACTIF', type_commission: 'AUCUNE', valeur_commission: '0', notes: '',
 }
 
 export function LivreursPage() {
@@ -72,8 +73,8 @@ export function LivreursPage() {
   function openEdit(l: Livreur) {
     setEditId(l.id)
     setForm({
-      nom_complet: l.nom_complet, telephone: l.telephone, type_vehicule: l.type_vehicule, plaque: l.plaque ?? '',
-      zones: parseZones(l.zones), statut: l.statut, date_embauche: l.date_embauche ?? '',
+      nom_complet: l.nom_complet, telephone: l.telephone, type_vehicule: l.type_vehicule,
+      zones: parseZones(l.zones), statut: l.statut,
       type_commission: l.type_commission, valeur_commission: String(l.valeur_commission), notes: l.notes ?? '',
     })
     setZoneInput('')
@@ -86,7 +87,7 @@ export function LivreursPage() {
     const payload = {
       nom_complet: form.nom_complet, telephone: form.telephone, type_vehicule: form.type_vehicule,
       zones: form.zones.length ? form.zones.join(',') : null, statut: form.statut,
-      date_embauche: form.date_embauche || null, type_commission: form.type_commission,
+      type_commission: form.type_commission,
       valeur_commission: Number(form.valeur_commission) || 0, notes: form.notes || null,
     }
     if (editId) {
@@ -140,7 +141,7 @@ export function LivreursPage() {
   const filtered = rows.filter(r => !search || r.nom_complet.toLowerCase().includes(search.toLowerCase()) || r.telephone.includes(search))
 
   const columns: Column<Row>[] = [
-    { key: 'nom', header: 'Nom', sortValue: r => r.nom_complet, render: r => <div><div className="font-medium">{r.nom_complet}</div><div className="text-xs text-text-muted">{VEHICULE_LABELS[r.type_vehicule]}{r.plaque ? ` · ${r.plaque}` : ''}</div></div> },
+    { key: 'nom', header: 'Nom', sortValue: r => r.nom_complet, render: r => <div><div className="font-medium">{r.nom_complet}</div><div className="text-xs text-text-muted">{VEHICULE_LABELS[r.type_vehicule]}</div></div> },
     { key: 'tel', header: 'Téléphone', sortValue: r => r.telephone, render: r => <span className="font-mono">{r.telephone}</span> },
     { key: 'statut', header: 'Statut', sortValue: r => r.statut, render: r => {
       const c = r.statut === 'ACTIF' ? 'bg-success-100/20 text-success-300 border border-success-500/30' : r.statut === 'EN_CONGE' ? 'bg-warning-100/20 text-warning-300 border border-warning-500/30' : 'bg-bg-hover text-text-secondary border border-border'
@@ -178,7 +179,7 @@ export function LivreursPage() {
           <div><label className="label">Type de véhicule</label><select className="input" value={form.type_vehicule} onChange={e => setForm(s => ({ ...s, type_vehicule: e.target.value as Livreur['type_vehicule'] }))}>
             {Object.entries(VEHICULE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select></div>
-          <div><label className="label">Plaque</label><input className="input" value={form.plaque} onChange={e => setForm(s => ({ ...s, plaque: e.target.value }))} /></div>
+
           <div className="col-span-2">
             <label className="label">Zones de livraison</label>
             <div className="flex flex-wrap gap-1.5 mb-2 min-h-[2rem]">
@@ -209,11 +210,10 @@ export function LivreursPage() {
           <div><label className="label">Statut</label><select className="input" value={form.statut} onChange={e => setForm(s => ({ ...s, statut: e.target.value as Livreur['statut'] }))}>
             {Object.entries(LIVREUR_STATUT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select></div>
-          <div><label className="label">Date d'embauche</label><input type="date" className="input" value={form.date_embauche} onChange={e => setForm(s => ({ ...s, date_embauche: e.target.value }))} /></div>
           <div><label className="label">Type de commission</label><select className="input" value={form.type_commission} onChange={e => setForm(s => ({ ...s, type_commission: e.target.value as Livreur['type_commission'] }))}>
             {Object.entries(COMMISSION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select></div>
-          <div><label className="label">Valeur commission (montant ou %)</label><input type="number" step="0.01" className="input" value={form.valeur_commission} onChange={e => setForm(s => ({ ...s, valeur_commission: e.target.value }))} /></div>
+          <div><label className="label">Commission par colis (montant)</label><input type="number" step="0.01" className="input" value={form.valeur_commission} onChange={e => setForm(s => ({ ...s, valeur_commission: e.target.value }))} disabled={form.type_commission === 'AUCUNE'} /></div>
           <div className="col-span-2"><label className="label">Notes</label><textarea className="input" value={form.notes} onChange={e => setForm(s => ({ ...s, notes: e.target.value }))} /></div>
         </div>
       </Modal>

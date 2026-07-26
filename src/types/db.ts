@@ -70,7 +70,7 @@ export interface Livreur {
   zones: string | null
   statut: 'ACTIF' | 'INACTIF' | 'EN_CONGE'
   date_embauche: string | null
-  type_commission: 'FIXE' | 'POURCENTAGE' | 'AUCUNE'
+  type_commission: 'FIXE' | 'AUCUNE'
   valeur_commission: number
   notes: string | null
   supprime: boolean
@@ -85,7 +85,7 @@ export interface Colis {
   destinataire_id: number
   livreur_id: number | null
   contenu: string
-  poids: number
+  poids: number | null
   valeur_declaree: number
   ville_destination: string
   adresse_livraison: string
@@ -94,6 +94,7 @@ export interface Colis {
   mode_paiement_attendu: MoyenPaiement
   priorite: 'NORMALE' | 'EXPRESS'
   fragile: boolean
+  retrait_comptoir: boolean
   statut: ColisStatut
   paye: boolean
   date_reception: string
@@ -249,4 +250,15 @@ export interface CommissionLivreur {
   date_paiement: string | null
   livreur?: Pick<Livreur, 'nom_complet'>
   colis?: Pick<Colis, 'code'>
+}
+
+export interface LigneColis {
+  id: number
+  colis_id: number
+  article_id: number | null
+  designation: string
+  quantite: number
+  prix_unitaire: number
+  montant: number
+  created_at: string
 }

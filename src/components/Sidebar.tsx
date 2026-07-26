@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Package, Users, MapPin, Truck, CreditCard,
-  BarChart3, Boxes, Shield, Settings, LogOut, X, Sparkles,
+  BarChart3, Route, Shield, Settings, LogOut, X, Sparkles,
 } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import type { Role } from '../types/db'
@@ -16,7 +16,7 @@ const NAV: NavItem[] = [
   { to: '/livreurs', label: 'Livreurs', icon: Truck, section: 'Opérations' },
   { to: '/paiements', label: 'Paiements', icon: CreditCard, section: 'Finance' },
   { to: '/comptabilite', label: 'Comptabilité', icon: BarChart3, roles: ['ADMIN'], section: 'Finance' },
-  { to: '/stocks', label: 'Stocks', icon: Boxes, section: 'Gestion' },
+  { to: '/tournees', label: 'Tournées', icon: Route, section: 'Opérations' },
   { to: '/utilisateurs', label: 'Utilisateurs', icon: Shield, roles: ['ADMIN'], section: 'Gestion' },
   { to: '/parametres', label: 'Paramètres', icon: Settings, roles: ['ADMIN'], section: 'Gestion' },
 ]
