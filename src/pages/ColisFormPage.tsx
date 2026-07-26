@@ -7,7 +7,7 @@ import { logActivite, genererCodeColis } from '../lib/audit'
 import { toast } from '../components/Toast'
 import { valideTelephone, formatMontant } from '../lib/format'
 import { trouverLivreurPourVille, zonesInclude } from '../lib/zones'
-import type { Client, Destinataire, Livreur, Ville, ArticleStock, MoyenPaiement, LigneColis } from '../types/db'
+import type { Client, Destinataire, Livreur, Ville, ArticleStock, MoyenPaiement, EcheancePaiement, LigneColis } from '../types/db'
 
 interface Ligne { designation: string; quantite: string; prix_unitaire: string; montant: number }
 
@@ -15,20 +15,23 @@ interface FormState {
   client_id: string; destinataire_id: string; livreur_id: string
   contenu: string
   ville_destination: string; adresse_livraison: string
-  montant: string; mode_paiement_attendu: MoyenPaiement
+  montant: string; mode_paiement_attendu: MoyenPaiement; echeance_paiement: EcheancePaiement
   priorite: 'NORMALE' | 'EXPRESS'; notes_internes: string
   retrait_comptoir: boolean
   lignes: Ligne[]
 }
 
 const MOYENS: { value: MoyenPaiement; label: string }[] = [
-  { value: 'PORT_PAYE', label: 'Livraison payée (en avance)' },
-  { value: 'A_LIVRAISON', label: 'Payée à la livraison' },
   { value: 'ESPECES', label: 'Espèces' },
   { value: 'WAVE', label: 'Wave' },
   { value: 'ORANGE_MONEY', label: 'Orange Money' },
   { value: 'CARTE', label: 'Carte bancaire' },
   { value: 'VIREMENT', label: 'Virement' },
+]
+
+const ECHEANCES: { value: EcheancePaiement; label: string }[] = [
+  { value: 'LIVRAISON', label: 'À la livraison' },
+  { value: 'AVANCE', label: 'En avance' },
 ]
 
 function ligneMontant(l: Ligne) {
@@ -52,7 +55,7 @@ export function ColisFormPage() {
     client_id: '', destinataire_id: '', livreur_id: '',
     contenu: '',
     ville_destination: '', adresse_livraison: '',
-    montant: '0', mode_paiement_attendu: 'PORT_PAYE',
+    montant: '0', mode_paiement_attendu: 'ESPECES', echeance_paiement: 'LIVRAISON',
     priorite: 'NORMALE', notes_internes: '',
     retrait_comptoir: false,
     lignes: [{ designation: '', quantite: '1', prix_unitaire: '0', montant: 0 }],
@@ -84,7 +87,7 @@ export function ColisFormPage() {
             livreur_id: c.livreur_id ? String(c.livreur_id) : '',
             contenu: c.contenu,
             ville_destination: c.ville_destination, adresse_livraison: c.adresse_livraison,
-            montant: String(c.montant), mode_paiement_attendu: c.mode_paiement_attendu,
+            montant: String(c.montant), mode_paiement_attendu: c.mode_paiement_attendu, echeance_paiement: c.echeance_paiement ?? 'LIVRAISON',
             priorite: c.priorite, notes_internes: c.notes_internes ?? '',
             retrait_comptoir: c.retrait_comptoir ?? false,
             lignes: [{ designation: '', quantite: '1', prix_unitaire: '0', montant: 0 }],
@@ -237,6 +240,7 @@ export function ColisFormPage() {
         adresse_livraison: form.adresse_livraison,
         montant: montantFinal,
         mode_paiement_attendu: form.mode_paiement_attendu,
+        echeance_paiement: form.echeance_paiement,
         priorite: form.priorite,
         retrait_comptoir: form.retrait_comptoir,
         notes_internes: form.notes_internes || null,
@@ -531,7 +535,7 @@ export function ColisFormPage() {
         {/* Paiement */}
         <section>
           <h3 className="text-sm font-semibold text-gold-500 mb-2">Paiement</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="label">Montant à encaisser *</label>
               <div className="relative">
@@ -551,13 +555,20 @@ export function ColisFormPage() {
               })()}
             </div>
             <div>
+              <label className="label">Échéance paiement</label>
+              <select className="input" value={form.echeance_paiement} onChange={e => set('echeance_paiement', e.target.value as EcheancePaiement)}>
+                {ECHEANCES.map(ech => <option key={ech.value} value={ech.value}>{ech.label}</option>)}
+              </select>
+              <p className="text-[11px] text-text-muted mt-1">
+                {form.echeance_paiement === 'AVANCE' ? 'Le client paie avant la livraison.' : 'Le client paie à la réception du colis.'}
+              </p>
+            </div>
+            <div>
               <label className="label">Mode de paiement</label>
               <select className="input" value={form.mode_paiement_attendu} onChange={e => set('mode_paiement_attendu', e.target.value as MoyenPaiement)}>
                 {MOYENS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
-              <p className="text-[11px] text-text-muted mt-1">
-                {form.mode_paiement_attendu === 'PORT_PAYE' ? 'Le client a payé la livraison en avance.' : form.mode_paiement_attendu === 'A_LIVRAISON' ? 'Le client paie à la réception du colis.' : ''}
-              </p>
+              <p className="text-[11px] text-text-muted mt-1">Comment le client va payer.</p>
             </div>
           </div>
         </section>

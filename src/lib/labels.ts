@@ -1,4 +1,4 @@
-import type { ColisStatut, MoyenPaiement } from '../types/db'
+import type { ColisStatut, MoyenPaiement, EcheancePaiement } from '../types/db'
 
 export const STATUT_LABELS: Record<ColisStatut, string> = {
   RECU: 'Reçu',
@@ -24,8 +24,11 @@ export const MOYEN_LABELS: Record<MoyenPaiement, string> = {
   ORANGE_MONEY: 'Orange Money',
   CARTE: 'Carte bancaire',
   VIREMENT: 'Virement',
-  PORT_PAYE: 'Port payé (avance)',
-  A_LIVRAISON: 'À la livraison',
+}
+
+export const ECHEANCE_LABELS: Record<EcheancePaiement, string> = {
+  AVANCE: 'Payé en avance',
+  LIVRAISON: 'Payé à la livraison',
 }
 
 export const CATEGORIES_CHARGE: { value: string; label: string }[] = [

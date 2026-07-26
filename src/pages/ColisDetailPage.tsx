@@ -11,7 +11,7 @@ import { toast } from '../components/Toast'
 import { Modal } from '../components/Modal'
 import { StatusBadge } from '../components/StatusBadge'
 import { formatMontant, formatDateTime, formatDate } from '../lib/format'
-import { MOYEN_LABELS, STATUT_LABELS } from '../lib/labels'
+import { MOYEN_LABELS, STATUT_LABELS, ECHEANCE_LABELS } from '../lib/labels'
 import { trouverLivreurPourVille, zonesInclude, parseZones } from '../lib/zones'
 import type { Colis, HistoriqueColis, Commentaire, Paiement, MoyenPaiement, Livreur, LigneColis } from '../types/db'
 
@@ -295,6 +295,7 @@ export function ColisDetailPage() {
               <div><dt className="text-text-muted">Montant</dt><dd className="font-mono font-semibold text-gold-500">{formatMontant(colis.montant)}</dd></div>
               <div><dt className="text-text-muted">Payé</dt><dd className="font-mono">{formatMontant(colis.montant_paye)}</dd></div>
               <div><dt className="text-text-muted">Mode attendu</dt><dd>{MOYEN_LABELS[colis.mode_paiement_attendu]}</dd></div>
+              <div><dt className="text-text-muted">Échéance</dt><dd>{ECHEANCE_LABELS[colis.echeance_paiement]}</dd></div>
               <div><dt className="text-text-muted">Livreur</dt><dd>{colis.retrait_comptoir ? <span className="text-info-300">Retrait au comptoir</span> : (colis.livreur?.nom_complet ?? <span className="text-text-muted">Non affecté</span>)}</dd></div>
               {colis.notes_internes && <div><dt className="text-text-muted">Notes</dt><dd>{colis.notes_internes}</dd></div>}
             </dl>

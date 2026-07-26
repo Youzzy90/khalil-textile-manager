@@ -6,7 +6,9 @@ export type ColisStatut =
   | 'RECU' | 'EXPEDIE' | 'EN_LIVRAISON' | 'LIVRE' | 'RETOURNE' | 'ANNULE'
 
 export type MoyenPaiement =
-  | 'ESPECES' | 'WAVE' | 'ORANGE_MONEY' | 'CARTE' | 'VIREMENT' | 'PORT_PAYE' | 'A_LIVRAISON'
+  | 'ESPECES' | 'WAVE' | 'ORANGE_MONEY' | 'CARTE' | 'VIREMENT'
+
+export type EcheancePaiement = 'AVANCE' | 'LIVRAISON'
 
 export type SensEcriture = 'ENTREE' | 'SORTIE'
 
@@ -92,6 +94,7 @@ export interface Colis {
   montant: number
   montant_paye: number
   mode_paiement_attendu: MoyenPaiement
+  echeance_paiement: EcheancePaiement
   priorite: 'NORMALE' | 'EXPRESS'
   fragile: boolean
   retrait_comptoir: boolean
