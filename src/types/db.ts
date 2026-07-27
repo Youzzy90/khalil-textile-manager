@@ -72,7 +72,7 @@ export interface Livreur {
   zones: string | null
   statut: 'ACTIF' | 'INACTIF' | 'EN_CONGE'
   date_embauche: string | null
-  type_commission: 'FIXE' | 'AUCUNE'
+  type_commission: 'PORT' | 'FIXE' | 'AUCUNE'
   valeur_commission: number
   notes: string | null
   supprime: boolean
@@ -92,6 +92,7 @@ export interface Colis {
   ville_destination: string
   adresse_livraison: string
   montant: number
+  frais_livraison: number
   montant_paye: number
   mode_paiement_attendu: MoyenPaiement
   echeance_paiement: EcheancePaiement

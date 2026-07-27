@@ -21,7 +21,7 @@ type LivreurForm = {
 }
 const empty: LivreurForm = {
   nom_complet: '', telephone: '', type_vehicule: 'MOTO', zones: [],
-  statut: 'ACTIF', type_commission: 'AUCUNE', valeur_commission: '0', notes: '',
+  statut: 'ACTIF', type_commission: 'PORT', valeur_commission: '0', notes: '',
 }
 
 export function LivreursPage() {
@@ -152,6 +152,11 @@ export function LivreursPage() {
       : <div className="flex flex-wrap gap-1 max-w-[180px]">{r.zoneList.slice(0, 3).map(z => <span key={z} className="badge bg-gold-500/10 text-gold-500 border border-gold-500/30 capitalize text-[10px]"><MapPin size={9} /> {z}</span>)}{r.zoneList.length > 3 && <span className="text-[10px] text-text-muted">+{r.zoneList.length - 3}</span>}</div> },
     { key: 'encours', header: 'En cours', sortValue: r => r.en_cours, render: r => <span className="font-mono">{r.en_cours}</span> },
     { key: 'livres', header: 'Livrés', sortValue: r => r.livres, render: r => <span className="font-mono text-success-500">{r.livres}</span> },
+    { key: 'typecomm', header: 'Commission', sortValue: r => r.type_commission, render: r => {
+      if (r.type_commission === 'PORT') return <span className="badge bg-info-100/20 text-info-300 border border-info-500/30 text-[10px]">Frais de livraison</span>
+      if (r.type_commission === 'FIXE') return <span className="badge bg-gold-500/10 text-gold-500 border border-gold-500/30 text-[10px]">{formatMontant(r.valeur_commission)}/colis</span>
+      return <span className="text-xs text-text-muted">Aucune</span>
+    } },
     { key: 'comm', header: 'Commission due', sortValue: r => r.commission_due, render: r => <span className={`font-mono ${r.commission_due > 0 ? 'text-gold-500' : 'text-text-muted'}`}>{formatMontant(r.commission_due)}</span> },
     { key: 'actions', header: '', render: r => (
       <div className="flex gap-1 justify-end">
@@ -210,10 +215,12 @@ export function LivreursPage() {
           <div><label className="label">Statut</label><select className="input" value={form.statut} onChange={e => setForm(s => ({ ...s, statut: e.target.value as Livreur['statut'] }))}>
             {Object.entries(LIVREUR_STATUT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select></div>
-          <div><label className="label">Type de commission</label><select className="input" value={form.type_commission} onChange={e => setForm(s => ({ ...s, type_commission: e.target.value as Livreur['type_commission'] }))}>
+          <div><label className="label">Type de commission</label><select className="input" value={form.type_commission} onChange={e => setForm(s => ({ ...s, type_commission: e.target.value as Livreur['type_commission'], valeur_commission: e.target.value === 'PORT' ? '0' : s.valeur_commission }))}>
             {Object.entries(COMMISSION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select></div>
-          <div><label className="label">Commission par colis (montant)</label><input type="number" step="0.01" className="input" value={form.valeur_commission} onChange={e => setForm(s => ({ ...s, valeur_commission: e.target.value }))} disabled={form.type_commission === 'AUCUNE'} /></div>
+          </select>
+          {form.type_commission === 'PORT' && <p className="text-[11px] text-text-muted mt-1">Le livreur reçoit automatiquement les frais de livraison de chaque colis livré.</p>}
+          </div>
+          <div><label className="label">Commission par colis (montant)</label><input type="number" step="0.01" className="input" value={form.valeur_commission} onChange={e => setForm(s => ({ ...s, valeur_commission: e.target.value }))} disabled={form.type_commission === 'AUCUNE' || form.type_commission === 'PORT'} /></div>
           <div className="col-span-2"><label className="label">Notes</label><textarea className="input" value={form.notes} onChange={e => setForm(s => ({ ...s, notes: e.target.value }))} /></div>
         </div>
       </Modal>

@@ -7,7 +7,7 @@ import { logActivite, genererCodeColis } from '../lib/audit'
 import { toast } from '../components/Toast'
 import { valideTelephone, formatMontant } from '../lib/format'
 import { trouverLivreurPourVille, zonesInclude } from '../lib/zones'
-import type { Client, Destinataire, Livreur, Ville, ArticleStock, MoyenPaiement, EcheancePaiement, LigneColis } from '../types/db'
+import type { Client, Destinataire, Livreur, Ville, ArticleStock, MoyenPaiement, EcheancePaiement, LigneColis, Colis } from '../types/db'
 
 interface Ligne { designation: string; quantite: string; prix_unitaire: string; montant: number }
 
@@ -15,7 +15,7 @@ interface FormState {
   client_id: string; destinataire_id: string; livreur_id: string
   contenu: string
   ville_destination: string; adresse_livraison: string
-  montant: string; mode_paiement_attendu: MoyenPaiement; echeance_paiement: EcheancePaiement
+  montant: string; frais_livraison: string; mode_paiement_attendu: MoyenPaiement; echeance_paiement: EcheancePaiement
   priorite: 'NORMALE' | 'EXPRESS'; notes_internes: string
   retrait_comptoir: boolean
   lignes: Ligne[]
@@ -55,7 +55,7 @@ export function ColisFormPage() {
     client_id: '', destinataire_id: '', livreur_id: '',
     contenu: '',
     ville_destination: '', adresse_livraison: '',
-    montant: '0', mode_paiement_attendu: 'ESPECES', echeance_paiement: 'LIVRAISON',
+    montant: '0', frais_livraison: '0', mode_paiement_attendu: 'ESPECES', echeance_paiement: 'LIVRAISON',
     priorite: 'NORMALE', notes_internes: '',
     retrait_comptoir: false,
     lignes: [{ designation: '', quantite: '1', prix_unitaire: '0', montant: 0 }],
@@ -68,6 +68,8 @@ export function ColisFormPage() {
   const [showDest, setShowDest] = useState(false)
   const [qClient, setQClient] = useState({ nom: '', tel: '', ville: '' })
   const [qDest, setQDest] = useState({ nom: '', tel: '', ville: '', adresse: '' })
+  const [mergeColis, setMergeColis] = useState<Colis | null>(null)
+  const [mergeEnabled, setMergeEnabled] = useState(false)
 
   useEffect(() => {
     supabase.from('client').select('*').eq('supprime', false).order('nom_complet').then(({ data }) => setClients((data as Client[]) ?? []))
@@ -87,7 +89,7 @@ export function ColisFormPage() {
             livreur_id: c.livreur_id ? String(c.livreur_id) : '',
             contenu: c.contenu,
             ville_destination: c.ville_destination, adresse_livraison: c.adresse_livraison,
-            montant: String(c.montant), mode_paiement_attendu: c.mode_paiement_attendu, echeance_paiement: c.echeance_paiement ?? 'LIVRAISON',
+            montant: String(c.montant), frais_livraison: String(c.frais_livraison ?? 0), mode_paiement_attendu: c.mode_paiement_attendu, echeance_paiement: c.echeance_paiement ?? 'LIVRAISON',
             priorite: c.priorite, notes_internes: c.notes_internes ?? '',
             retrait_comptoir: c.retrait_comptoir ?? false,
             lignes: [{ designation: '', quantite: '1', prix_unitaire: '0', montant: 0 }],
@@ -107,6 +109,28 @@ export function ColisFormPage() {
       })
     }
   }, [id, editMode])
+
+  useEffect(() => {
+    if (!form.client_id) { setMergeColis(null); setMergeEnabled(false); return }
+    const cid = Number(form.client_id)
+    let cancelled = false
+    supabase.from('colis').select('*, destinataire(*)').eq('client_id', cid)
+      .eq('statut', 'RECU').eq('supprime', false)
+      .order('created_at', { ascending: false }).limit(5)
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        const all = data as any[]
+        let match: any = null
+        if (memeDestinataire) {
+          match = all.find(c => c.destinataire && c.destinataire.client_id === cid)
+        } else if (form.destinataire_id) {
+          match = all.find(c => String(c.destinataire_id) === form.destinataire_id)
+        }
+        setMergeColis(match ?? null)
+        setMergeEnabled(Boolean(match))
+      })
+    return () => { cancelled = true }
+  }, [form.client_id, form.destinataire_id, memeDestinataire])
 
   function set<K extends keyof FormState>(k: K, v: FormState[K]) { setForm(f => ({ ...f, [k]: v })) }
 
@@ -154,9 +178,11 @@ export function ColisFormPage() {
   }
 
   function autoPrix(ville: string) {
-    if (montantEdited) return
     const v = villes.find(x => x.nom.toLowerCase() === ville.trim().toLowerCase())
-    if (v && totalLignes === 0) set('montant', String(v.tarif_port))
+    if (v) {
+      set('frais_livraison', String(v.tarif_port))
+      if (!montantEdited && totalLignes === 0) set('montant', '0')
+    }
   }
 
   function findVille(nom: string) {
@@ -210,6 +236,30 @@ export function ColisFormPage() {
 
     setSaving(true)
     try {
+      if (mergeColis && mergeEnabled && !editMode) {
+        const lv = form.lignes.filter(l => l.designation.trim() && Number(l.quantite) > 0)
+        const ajoutTotal = lv.reduce((s, l) => s + ligneMontant(l), 0)
+        const nouveauMontant = Number(mergeColis.montant) + (ajoutTotal > 0 ? ajoutTotal : (Number(form.montant) || 0))
+        const { error: upErr } = await supabase.from('colis').update({ montant: nouveauMontant }).eq('id', mergeColis.id)
+        if (upErr) throw upErr
+        if (lv.length > 0) {
+          await supabase.from('ligne_colis').insert(lv.map(l => ({
+            colis_id: mergeColis.id,
+            article_id: articles.find(a => a.designation.toLowerCase() === l.designation.trim().toLowerCase())?.id ?? null,
+            designation: l.designation.trim(), quantite: Number(l.quantite),
+            prix_unitaire: Number(l.prix_unitaire), montant: ligneMontant(l),
+          })))
+        }
+        await supabase.from('historique_colis').insert({
+          colis_id: mergeColis.id, utilisateur_id: utilisateur.id, action: 'AJOUT_ARTICLES',
+          details: `Ajout de ${lv.length} article(s) — +${formatMontant(ajoutTotal)}`,
+        })
+        await logActivite(utilisateur, 'COLIS', 'COLIS_AJOUT', { type: 'colis', id: mergeColis.id })
+        toast('success', `Articles ajoutés au colis ${mergeColis.code} — pas de frais supplémentaire.`)
+        navigate(`/colis/${mergeColis.id}`)
+        return
+      }
+
       let destinataireId = Number(form.destinataire_id)
       if (memeDestinataire && form.client_id) {
         const client = clients.find(c => String(c.id) === form.client_id)
@@ -230,6 +280,7 @@ export function ColisFormPage() {
       }
 
       const montantFinal = totalLignes > 0 ? totalLignes : (Number(form.montant) || 0)
+      const fraisFinal = form.retrait_comptoir ? 0 : (Number(form.frais_livraison) || 0)
 
       const payload = {
         client_id: Number(form.client_id),
@@ -239,6 +290,7 @@ export function ColisFormPage() {
         ville_destination: form.retrait_comptoir ? (form.ville_destination || 'Comptoir') : form.ville_destination,
         adresse_livraison: form.adresse_livraison,
         montant: montantFinal,
+        frais_livraison: fraisFinal,
         mode_paiement_attendu: form.mode_paiement_attendu,
         echeance_paiement: form.echeance_paiement,
         priorite: form.priorite,
@@ -403,6 +455,29 @@ export function ColisFormPage() {
           )}
         </section>
 
+        {mergeColis && !editMode && (
+          <section className="rounded-lg border border-gold-500/40 bg-gold-500/5 p-3 animate-fadeIn">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start gap-3 flex-1">
+                <Package size={18} className="text-gold-500 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-sm font-medium text-gold-500">Colis en attente : {mergeColis.code}</div>
+                  <div className="text-xs text-text-muted mt-0.5">
+                    Ce client a déjà un colis non expédié pour ce destinataire ({formatMontant(mergeColis.montant)} d'articles).
+                    {mergeEnabled ? ' Les nouveaux articles seront ajoutés à ce colis — pas de frais de livraison supplémentaire.' : ' Un nouveau colis sera créé avec son propre frais de livraison.'}
+                  </div>
+                </div>
+              </div>
+              <button type="button" onClick={() => setMergeEnabled(e => !e)} className="flex items-center gap-2 text-xs shrink-0">
+                <span className={mergeEnabled ? 'text-gold-500 font-medium' : 'text-text-muted'}>Ajouter au colis existant</span>
+                <div className={`w-9 h-5 rounded-full p-0.5 transition-colors ${mergeEnabled ? 'bg-gold-500' : 'bg-bg-hover'}`}>
+                  <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${mergeEnabled ? 'translate-x-4' : ''}`} />
+                </div>
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* Articles / Tissus */}
         <section>
           <div className="flex items-center justify-between mb-2">
@@ -466,6 +541,7 @@ export function ColisFormPage() {
         </section>
 
         {/* Livraison */}
+        {!(mergeColis && mergeEnabled && !editMode) && (
         <section>
           <h3 className="text-sm font-semibold text-gold-500 mb-2">Livraison</h3>
 
@@ -531,41 +607,60 @@ export function ColisFormPage() {
             </>
           )}
         </section>
+        )}
 
         {/* Paiement */}
         <section>
           <h3 className="text-sm font-semibold text-gold-500 mb-2">Paiement</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {mergeColis && mergeEnabled && !editMode && (
+            <div className="rounded-lg border border-info-500/20 bg-info-500/5 p-2.5 mb-3 text-xs text-info-300 flex items-center gap-2">
+              <Package size={14} /> Frais de livraison et échéance hérités du colis {mergeColis.code}. Seul le montant des articles ajoutés est pris en compte.
+            </div>
+          )}
+          <div className={`grid grid-cols-1 gap-3 ${mergeColis && mergeEnabled && !editMode ? 'md:grid-cols-1' : 'md:grid-cols-3'}`}>
             <div>
-              <label className="label">Montant à encaisser *</label>
+              <label className="label">Montant articles *</label>
               <div className="relative">
                 <input type="number" className="input" value={form.montant} onChange={e => { set('montant', e.target.value); setMontantEdited(true) }} />
                 {totalLignes > 0 && (
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 badge bg-gold-500/10 text-gold-500 border border-gold-500/30 text-[10px]"><Package size={9} /> Articles</span>
                 )}
-                {totalLignes === 0 && !montantEdited && form.ville_destination && findVille(form.ville_destination) ? (
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 badge bg-gold-500/10 text-gold-500 border border-gold-500/30 text-[10px]"><Sparkles size={9} /> Auto</span>
-                ) : null}
               </div>
               {totalLignes > 0 ? (
                 <p className="text-[11px] text-text-muted mt-1">Calculé depuis les articles : {formatMontant(totalLignes)}</p>
-              ) : form.ville_destination && (() => {
-                const v = findVille(form.ville_destination)
-                return v ? <p className="text-[11px] text-text-muted mt-1">Tarif appliqué : {formatMontant(v.tarif_port)}</p> : null
-              })()}
+              ) : <p className="text-[11px] text-text-muted mt-1">Prix des articles (hors livraison).</p>}
             </div>
             <div>
+              <label className="label">Frais de livraison</label>
+              <input type="number" className="input" value={form.frais_livraison} onChange={e => set('frais_livraison', e.target.value)} disabled={form.retrait_comptoir || (mergeColis !== null && mergeEnabled)} />
+              {form.retrait_comptoir ? (
+                <p className="text-[11px] text-text-muted mt-1">Aucun frais (retrait au comptoir).</p>
+              ) : (
+                <p className="text-[11px] text-text-muted mt-1">Crédité au livreur à la livraison. {form.ville_destination && findVille(form.ville_destination) ? <>Tarif {form.ville_destination} : {formatMontant(findVille(form.ville_destination)!.tarif_port)}</> : null}</p>
+              )}
+            </div>
+            <div>
+              <label className="label">Total {form.echeance_paiement === 'AVANCE' ? 'à encaisser' : 'articles'}</label>
+              <div className="input flex items-center justify-between bg-bg-soft">
+                <span className="font-mono font-semibold text-gold-500">{formatMontant(form.echeance_paiement === 'AVANCE' ? ((totalLignes > 0 ? totalLignes : (Number(form.montant) || 0)) + (form.retrait_comptoir ? 0 : (Number(form.frais_livraison) || 0))) : (totalLignes > 0 ? totalLignes : (Number(form.montant) || 0)))}</span>
+                <span className="text-[10px] text-text-muted">{form.echeance_paiement === 'AVANCE' ? 'articles + port' : 'port à part'}</span>
+              </div>
+              <p className="text-[11px] text-text-muted mt-1">{form.echeance_paiement === 'AVANCE' ? 'Somme que le client doit payer à l\'entreprise.' : 'Le port sera payé par le livreur au client.'}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <div>
               <label className="label">Échéance paiement</label>
-              <select className="input" value={form.echeance_paiement} onChange={e => set('echeance_paiement', e.target.value as EcheancePaiement)}>
+              <select className="input" value={form.echeance_paiement} onChange={e => set('echeance_paiement', e.target.value as EcheancePaiement)} disabled={mergeColis !== null && mergeEnabled}>
                 {ECHEANCES.map(ech => <option key={ech.value} value={ech.value}>{ech.label}</option>)}
               </select>
               <p className="text-[11px] text-text-muted mt-1">
-                {form.echeance_paiement === 'AVANCE' ? 'Le client paie avant la livraison.' : 'Le client paie à la réception du colis.'}
+                {form.echeance_paiement === 'AVANCE' ? 'Le client paie la totalité (articles + port) à l\'entreprise avant la livraison. Le port sera reversé au livreur.' : 'Le client paie le port directement au livreur à la réception. L\'entreprise n\'enregistre que le prix des articles.'}
               </p>
             </div>
             <div>
               <label className="label">Mode de paiement</label>
-              <select className="input" value={form.mode_paiement_attendu} onChange={e => set('mode_paiement_attendu', e.target.value as MoyenPaiement)}>
+              <select className="input" value={form.mode_paiement_attendu} onChange={e => set('mode_paiement_attendu', e.target.value as MoyenPaiement)} disabled={mergeColis !== null && mergeEnabled}>
                 {MOYENS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
               <p className="text-[11px] text-text-muted mt-1">Comment le client va payer.</p>

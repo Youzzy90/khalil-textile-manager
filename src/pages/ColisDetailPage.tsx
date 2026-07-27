@@ -13,7 +13,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { formatMontant, formatDateTime, formatDate } from '../lib/format'
 import { MOYEN_LABELS, STATUT_LABELS, ECHEANCE_LABELS } from '../lib/labels'
 import { trouverLivreurPourVille, zonesInclude, parseZones } from '../lib/zones'
-import type { Colis, HistoriqueColis, Commentaire, Paiement, MoyenPaiement, Livreur, LigneColis } from '../types/db'
+import type { Colis, HistoriqueColis, Commentaire, Paiement, MoyenPaiement, Livreur, LigneColis, Ville } from '../types/db'
 
 export function ColisDetailPage() {
   const { id } = useParams()
@@ -25,6 +25,7 @@ export function ColisDetailPage() {
   const [commentaires, setCommentaires] = useState<Commentaire[]>([])
   const [paiements, setPaiements] = useState<Paiement[]>([])
   const [livreurs, setLivreurs] = useState<Livreur[]>([])
+  const [villes, setVilles] = useState<Ville[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'infos' | 'historique' | 'paiements' | 'commentaires'>('infos')
   const [newComment, setNewComment] = useState('')
@@ -40,7 +41,7 @@ export function ColisDetailPage() {
 
   async function load() {
     setLoading(true)
-    const [c, h, cm, p, l, li] = await Promise.all([
+    const [c, h, cm, p, l, li, vi] = await Promise.all([
       supabase.from('colis').select(`*, client:client(*), destinataire:destinataire(*), livreur:livreur(*)`)
         .eq('id', id).maybeSingle(),
       supabase.from('historique_colis').select(`*, utilisateur:utilisateur(nom_complet)`)
@@ -50,6 +51,7 @@ export function ColisDetailPage() {
       supabase.from('paiement').select('*').eq('colis_id', id).order('date_paiement', { ascending: false }),
       supabase.from('livreur').select('id,nom_complet,statut,zones,type_commission,valeur_commission').eq('supprime', false).order('nom_complet'),
       supabase.from('ligne_colis').select('*').eq('colis_id', id).order('id'),
+      supabase.from('ville').select('*').eq('actif', true).order('nom'),
     ])
     setColis(c.data as unknown as Colis)
     setHistorique((h.data as HistoriqueColis[]) ?? [])
@@ -57,13 +59,17 @@ export function ColisDetailPage() {
     setPaiements((p.data as Paiement[]) ?? [])
     setLivreurs((l.data as Livreur[]) ?? [])
     setLignes((li.data as LigneColis[]) ?? [])
+    setVilles((vi.data as Ville[]) ?? [])
     setLoading(false)
   }
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-gold-500" /></div>
   if (!colis) return <div className="card p-8 text-center text-text-muted">Colis introuvable.</div>
 
-  const solde = Number(colis.montant) - Number(colis.montant_paye)
+  const port = Number(colis.frais_livraison ?? 0)
+  const enAvance = colis.echeance_paiement === 'AVANCE'
+  const totalDu = enAvance ? Number(colis.montant) + port : Number(colis.montant)
+  const solde = totalDu - Number(colis.montant_paye)
   const verrou = colis.statut === 'LIVRE' || colis.statut === 'ANNULE'
 
   async function changerStatut(nouveau: Colis['statut'], details?: Record<string, unknown>) {
@@ -84,14 +90,26 @@ export function ColisDetailPage() {
     })
     await logActivite(utilisateur, 'COLIS', 'COLIS_STATUS', { type: 'colis', id: colis.id }, { ancien, nouveau })
 
-    // Commission on delivery (FIXE only)
-    if (nouveau === 'LIVRE' && colis.livreur_id) {
+    if (nouveau === 'LIVRE' && colis.livreur_id && enAvance) {
       const liv = livreurs.find(l => l.id === colis.livreur_id)
-      if (liv && liv.type_commission === 'FIXE') {
-        const montant = Number(liv.valeur_commission)
+      if (liv) {
+        let montant = 0
+        if (liv.type_commission === 'PORT') {
+          montant = port
+        } else if (liv.type_commission === 'FIXE') {
+          montant = Number(liv.valeur_commission)
+        }
         if (montant > 0) {
+          const numEcr = await genererNumeroEcriture()
+          const { data: ecr } = await supabase.from('ecriture_comptable').insert({
+            numero: numEcr, sens: 'SORTIE', categorie: 'COMMISSION_LIVREUR',
+            libelle: `Commission livreur ${liv.nom_complet} — colis ${colis.code}`,
+            montant, moyen: 'ESPECES', colis_id: colis.id, utilisateur_id: utilisateur.id,
+            automatique: true,
+          }).select().single()
           await supabase.from('commission_livreur').insert({
             livreur_id: liv.id, colis_id: colis.id, montant,
+            ecriture_id: (ecr as { id: number })?.id ?? null,
           })
         }
       }
@@ -105,16 +123,20 @@ export function ColisDetailPage() {
   async function affecter() {
     if (!affectLivreur) { toast('error', 'Sélectionnez un livreur.'); return }
     const livreurId = Number(affectLivreur)
-    const { error } = await supabase.from('colis').update({ livreur_id: livreurId, statut: 'EN_LIVRAISON', date_en_livraison: new Date().toISOString() })
-      .eq('id', colis!.id)
+    const ville = villes.find(v => v.nom === colis!.ville_destination)
+    const patch: Record<string, unknown> = { livreur_id: livreurId, statut: 'EN_LIVRAISON', date_en_livraison: new Date().toISOString() }
+    if (ville && !colis!.retrait_comptoir) {
+      patch.frais_livraison = ville.tarif_port
+    }
+    const { error } = await supabase.from('colis').update(patch).eq('id', colis!.id)
     if (error) { toast('error', error.message); return }
     await supabase.from('historique_colis').insert({
       colis_id: colis!.id, utilisateur_id: utilisateur!.id, action: 'AFFECT',
       statut_precedent: colis!.statut, statut_nouveau: 'EN_LIVRAISON',
-      details: JSON.stringify({ livreur_id: livreurId }),
+      details: JSON.stringify({ livreur_id: livreurId, frais: patch.frais_livraison ?? null }),
     })
     await logActivite(utilisateur!, 'COLIS', 'COLIS_AFFECT', { type: 'colis', id: colis!.id })
-    toast('success', 'Colis affecté au livreur.')
+    toast('success', ville && !colis!.retrait_comptoir ? `Colis affecté. Frais de livraison ${formatMontant(ville.tarif_port)} appliqué (${ville.nom}).` : 'Colis affecté au livreur.')
     setShowAffect(false); setAffectLivreur('')
     load()
   }
@@ -136,7 +158,7 @@ export function ColisDetailPage() {
     })
     if (e1) { toast('error', e1.message); return }
     await supabase.from('colis').update({
-      montant_paye: newPaye, paye: newPaye >= Number(colis.montant) - 0.01,
+      montant_paye: newPaye, paye: newPaye >= totalDu - 0.01,
     }).eq('id', colis.id)
     await supabase.from('ecriture_comptable').insert({
       numero: numEcr, sens: 'ENTREE', categorie: 'RECETTE_LIVRAISON',
@@ -222,11 +244,17 @@ export function ColisDetailPage() {
           <div className="flex items-center gap-3">
             <Clock className="text-warning-500" size={20} />
             <div>
-              <div className="text-sm font-semibold">Solde à encaisser : {formatMontant(solde)}</div>
-              <div className="text-xs text-text-secondary">Payé {formatMontant(colis.montant_paye)} sur {formatMontant(colis.montant)}</div>
+              <div className="text-sm font-semibold">Reste à encaisser : {formatMontant(solde)}</div>
+              <div className="text-xs text-text-secondary">Payé {formatMontant(colis.montant_paye)} sur {formatMontant(totalDu)} {!enAvance && '· Le port est payé par le livreur'}</div>
             </div>
           </div>
           <button onClick={() => setShowPay(true)} className="btn-primary"><Banknote size={16} /> Encaisser</button>
+        </div>
+      )}
+      {!enAvance && colis.livreur_id && colis.statut !== 'ANNULE' && colis.statut !== 'LIVRE' && (
+        <div className="card p-3 mb-4 border-info-500/20 bg-info-500/5 flex items-center gap-3 animate-fadeIn">
+          <Truck className="text-info-300" size={18} />
+          <div className="text-xs text-info-300">Paiement à la livraison : le client paie {formatMontant(port)} directement au livreur. L'entreprise n'enregistre pas ce paiement.</div>
         </div>
       )}
 
@@ -292,8 +320,11 @@ export function ColisDetailPage() {
           <div className="card p-4">
             <h3 className="text-sm font-semibold text-gold-500 mb-3">Paiement & livraison</h3>
             <dl className="space-y-2 text-sm">
-              <div><dt className="text-text-muted">Montant</dt><dd className="font-mono font-semibold text-gold-500">{formatMontant(colis.montant)}</dd></div>
+              <div><dt className="text-text-muted">Montant articles</dt><dd className="font-mono">{formatMontant(colis.montant)}</dd></div>
+              <div><dt className="text-text-muted">Frais de livraison</dt><dd className="font-mono">{formatMontant(port)}</dd></div>
+              <div><dt className="text-text-muted">Total dû (entreprise)</dt><dd className="font-mono font-semibold text-gold-500">{formatMontant(totalDu)}</dd></div>
               <div><dt className="text-text-muted">Payé</dt><dd className="font-mono">{formatMontant(colis.montant_paye)}</dd></div>
+              <div><dt className="text-text-muted">Reste à payer</dt><dd className="font-mono font-semibold text-warning-500">{formatMontant(solde)}</dd></div>
               <div><dt className="text-text-muted">Mode attendu</dt><dd>{MOYEN_LABELS[colis.mode_paiement_attendu]}</dd></div>
               <div><dt className="text-text-muted">Échéance</dt><dd>{ECHEANCE_LABELS[colis.echeance_paiement]}</dd></div>
               <div><dt className="text-text-muted">Livreur</dt><dd>{colis.retrait_comptoir ? <span className="text-info-300">Retrait au comptoir</span> : (colis.livreur?.nom_complet ?? <span className="text-text-muted">Non affecté</span>)}</dd></div>
@@ -432,6 +463,16 @@ export function ColisDetailPage() {
             </select>
           </div>
           <p className="text-xs text-text-muted">Le colis passera au statut « En livraison ».</p>
+          {(() => {
+            const ville = villes.find(v => v.nom === colis.ville_destination)
+            if (ville && !colis.retrait_comptoir) {
+              return <div className="rounded-lg border border-info-500/20 bg-info-500/5 p-2.5 text-xs text-info-300 flex items-center gap-2"><MapPin size={14} /> Frais de livraison appliqué : <span className="font-mono font-semibold">{formatMontant(ville.tarif_port)}</span> (tarif {ville.nom}).</div>
+            }
+            if (colis.retrait_comptoir) {
+              return <div className="rounded-lg border border-border bg-bg-soft p-2.5 text-xs text-text-muted flex items-center gap-2"><MapPin size={14} /> Retrait au comptoir — pas de frais de livraison.</div>
+            }
+            return <div className="rounded-lg border border-warning-500/30 bg-warning-500/5 p-2.5 text-xs text-warning-300 flex items-center gap-2"><MapPin size={14} /> Aucun tarif enregistré pour cette zone.</div>
+          })()}
         </div>
       </Modal>
 
