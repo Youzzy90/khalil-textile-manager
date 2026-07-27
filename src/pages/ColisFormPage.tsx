@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Loader2, Plus, Sparkles, MapPin, UserCheck, Trash2, Package, Store } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Plus, Sparkles, MapPin, UserCheck, Trash2, Package, Store, FileText } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { logActivite, genererCodeColis } from '../lib/audit'
 import { toast } from '../components/Toast'
 import { valideTelephone, formatMontant } from '../lib/format'
 import { trouverLivreurPourVille, zonesInclude } from '../lib/zones'
-import type { Client, Destinataire, Livreur, Ville, ArticleStock, MoyenPaiement, EcheancePaiement, LigneColis, Colis } from '../types/db'
+import type { Client, Destinataire, Livreur, Ville, ArticleStock, MoyenPaiement, EcheancePaiement, LigneColis, Colis, ColisStatut } from '../types/db'
 
 interface Ligne { designation: string; quantite: string; prix_unitaire: string; montant: number }
 
@@ -70,6 +70,7 @@ export function ColisFormPage() {
   const [qDest, setQDest] = useState({ nom: '', tel: '', ville: '', adresse: '' })
   const [mergeColis, setMergeColis] = useState<Colis | null>(null)
   const [mergeEnabled, setMergeEnabled] = useState(false)
+  const [originalStatut, setOriginalStatut] = useState<ColisStatut | null>(null)
 
   useEffect(() => {
     supabase.from('client').select('*').eq('supprime', false).order('nom_complet').then(({ data }) => setClients((data as Client[]) ?? []))
@@ -83,6 +84,7 @@ export function ColisFormPage() {
       supabase.from('colis').select('*').eq('id', id).maybeSingle().then(({ data }) => {
         if (data) {
           const c = data as any
+          setOriginalStatut(c.statut ?? null)
           setForm(f => ({
             ...f,
             client_id: String(c.client_id), destinataire_id: String(c.destinataire_id),
@@ -227,11 +229,22 @@ export function ColisFormPage() {
     toast('success', 'Destinataire créé.')
   }
 
-  async function save() {
+  async function save(asDraft = false) {
     if (!utilisateur) return
-    if (!form.client_id) { toast('error', "Sélectionnez un expéditeur."); return }
-    if (!memeDestinataire && !form.destinataire_id) { toast('error', "Sélectionnez un destinataire."); return }
-    if (!form.contenu.trim()) { toast('error', "Le contenu est obligatoire."); return }
+    const hasMinimal = form.client_id || form.destinataire_id || memeDestinataire || form.contenu.trim() || form.lignes.some(l => l.designation.trim())
+    if (!hasMinimal) {
+      toast('error', "Renseignez au moins un expéditeur, un destinataire ou un contenu pour enregistrer."); return
+    }
+    if (!asDraft) {
+      const manquants: string[] = []
+      if (!form.client_id) manquants.push('expéditeur')
+      if (!memeDestinataire && !form.destinataire_id) manquants.push('destinataire')
+      if (!form.contenu.trim() && !form.lignes.some(l => l.designation.trim())) manquants.push('contenu')
+      if (!form.retrait_comptoir && !form.ville_destination) manquants.push('ville de destination')
+      if (manquants.length > 0) {
+        toast('error', `Champs manquants : ${manquants.join(', ')}. Utilisez « Enregistrer comme brouillon » pour sauvegarder et compléter plus tard.`); return
+      }
+    }
 
     setSaving(true)
     try {
@@ -282,12 +295,12 @@ export function ColisFormPage() {
       const fraisFinal = form.retrait_comptoir ? 0 : (Number(form.frais_livraison) || 0)
 
       const payload = {
-        client_id: Number(form.client_id),
-        destinataire_id: destinataireId,
+        client_id: form.client_id ? Number(form.client_id) : null,
+        destinataire_id: destinataireId || null,
         livreur_id: form.retrait_comptoir ? null : (form.livreur_id ? Number(form.livreur_id) : null),
-        contenu: form.contenu.trim(),
-        ville_destination: form.retrait_comptoir ? (form.ville_destination || 'Comptoir') : (form.ville_destination || ''),
-        adresse_livraison: form.adresse_livraison || '',
+        contenu: form.contenu.trim() || null,
+        ville_destination: form.retrait_comptoir ? (form.ville_destination || 'Comptoir') : (form.ville_destination || null),
+        adresse_livraison: form.adresse_livraison || null,
         montant: montantFinal,
         frais_livraison: fraisFinal,
         mode_paiement_attendu: form.mode_paiement_attendu,
@@ -295,6 +308,7 @@ export function ColisFormPage() {
         priorite: form.priorite,
         retrait_comptoir: form.retrait_comptoir,
         notes_internes: form.notes_internes || null,
+        statut: asDraft ? 'BROUILLON' : 'RECU',
       }
 
       // Mettre à jour le prix unitaire des articles existants si modifié
@@ -307,7 +321,9 @@ export function ColisFormPage() {
       }
 
       if (editMode && id) {
-        const { error } = await supabase.from('colis').update(payload).eq('id', id)
+        const wasDraft = originalStatut === 'BROUILLON'
+        const nextStatut = asDraft ? 'BROUILLON' : (wasDraft ? 'RECU' : (originalStatut ?? 'RECU'))
+        const { error } = await supabase.from('colis').update({ ...payload, statut: nextStatut }).eq('id', id)
         if (error) throw error
         await supabase.from('ligne_colis').delete().eq('colis_id', id)
         if (lignesValides.length > 0) {
@@ -320,14 +336,15 @@ export function ColisFormPage() {
         }
         await supabase.from('historique_colis').insert({
           colis_id: Number(id), utilisateur_id: utilisateur.id, action: 'EDIT',
+          statut_precedent: originalStatut, statut_nouveau: nextStatut,
           details: JSON.stringify(payload),
         })
         await logActivite(utilisateur, 'COLIS', 'COLIS_EDIT', { type: 'colis', id: Number(id) })
-        toast('success', 'Colis modifié.')
+        toast('success', asDraft ? 'Brouillon mis à jour.' : 'Colis modifié.')
         navigate(`/colis/${id}`)
       } else {
         const code = await genererCodeColis()
-        const { data, error } = await supabase.from('colis').insert({ ...payload, code, statut: 'RECU' }).select().single()
+        const { data, error } = await supabase.from('colis').insert({ ...payload, code }).select().single()
         if (error) throw error
         const colis = data as any
         if (lignesValides.length > 0) {
@@ -340,10 +357,10 @@ export function ColisFormPage() {
         }
         await supabase.from('historique_colis').insert({
           colis_id: colis.id, utilisateur_id: utilisateur.id, action: 'CREATE',
-          statut_precedent: null, statut_nouveau: 'RECU',
+          statut_precedent: null, statut_nouveau: asDraft ? 'BROUILLON' : 'RECU',
         })
         await logActivite(utilisateur, 'COLIS', 'COLIS_CREATE', { type: 'colis', id: colis.id })
-        toast('success', `Colis ${colis.code} créé.`)
+        toast('success', asDraft ? `Brouillon ${colis.code} enregistré — à compléter plus tard.` : `Colis ${colis.code} créé.`)
         navigate(`/colis/${colis.id}`)
       }
     } catch (e: any) {
@@ -372,9 +389,9 @@ export function ColisFormPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="label">Client *</label>
+              <label className="label">Client <span className="text-text-muted font-normal">(optionnel)</span></label>
               <select className="input" value={form.client_id} onChange={e => { set('client_id', e.target.value); if (memeDestinataire) applyClientAsDest(e.target.value) }}>
-                <option value="">— Sélectionner —</option>
+                <option value="">— Pas encore connu —</option>
                 {clients.map(c => <option key={c.id} value={c.id}>{c.nom_complet} — {c.telephone}</option>)}
               </select>
             </div>
@@ -434,14 +451,14 @@ export function ColisFormPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="label">Destinataire *</label>
+                <label className="label">Destinataire <span className="text-text-muted font-normal">(optionnel)</span></label>
                 <select className="input" value={form.destinataire_id} onChange={e => {
                   const idv = e.target.value
                   set('destinataire_id', idv)
                   const d = destinataires.find(x => String(x.id) === idv)
                   if (d) { set('adresse_livraison', d.adresse); onVilleChange(d.ville) }
                 }}>
-                  <option value="">— Sélectionner —</option>
+                  <option value="">— Pas encore connu —</option>
                   {destinataires.map(d => <option key={d.id} value={d.id}>{d.nom_complet} — {d.telephone}</option>)}
                 </select>
               </div>
@@ -526,8 +543,8 @@ export function ColisFormPage() {
           <h3 className="text-sm font-semibold text-gold-500 mb-2">Colis</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="md:col-span-2">
-              <label className="label">Contenu / description *</label>
-              <input className="input" value={form.contenu} onChange={e => set('contenu', e.target.value)} placeholder="Ex: Tissus wax (3 pièces)" />
+              <label className="label">Contenu / description <span className="text-text-muted font-normal">(optionnel)</span></label>
+              <input className="input" value={form.contenu} onChange={e => set('contenu', e.target.value)} placeholder="Ex: Tissus wax (3 pièces) — ou laissez vide pour l'instant" />
             </div>
             <div>
               <label className="label">Priorité</label>
@@ -674,7 +691,11 @@ export function ColisFormPage() {
 
         <div className="flex justify-end gap-2 pt-3 border-t border-border">
           <button onClick={() => navigate(-1)} className="btn-ghost">Annuler</button>
-          <button onClick={save} disabled={saving} className="btn-primary">
+          {!editMode && <button onClick={() => save(true)} disabled={saving} className="btn-secondary">
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+            Enregistrer comme brouillon
+          </button>}
+          <button onClick={() => save(false)} disabled={saving} className="btn-primary">
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             {editMode ? 'Enregistrer' : 'Créer le colis'}
           </button>

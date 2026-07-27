@@ -3,7 +3,7 @@
 export type Role = 'ADMIN' | 'EMPLOYE'
 
 export type ColisStatut =
-  | 'RECU' | 'EXPEDIE' | 'EN_LIVRAISON' | 'LIVRE' | 'RETOURNE' | 'ANNULE'
+  | 'BROUILLON' | 'RECU' | 'EXPEDIE' | 'EN_LIVRAISON' | 'LIVRE' | 'RETOURNE' | 'ANNULE'
 
 export type MoyenPaiement =
   | 'ESPECES' | 'WAVE' | 'ORANGE_MONEY' | 'CARTE' | 'VIREMENT'

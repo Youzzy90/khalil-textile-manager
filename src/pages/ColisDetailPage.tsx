@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Edit3, Trash2, Send, Truck, CheckCircle2, RotateCcw, XCircle,
+  ArrowLeft, Edit3, Trash2, Send, Truck, CheckCircle2, RotateCcw, XCircle, FileText,
   Banknote, Printer, MessageSquare, Clock, Loader2, MapPin, Sparkles, Package, CheckCircle,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -202,6 +202,7 @@ export function ColisDetailPage() {
       actions.push({ label: 'Retourné', icon: RotateCcw, action: () => changerStatut('RETOURNE'), cls: 'btn-danger' })
     }
   }
+  if (colis.statut === 'BROUILLON') actions.push({ label: 'Compléter', icon: Edit3, action: () => navigate(`/colis/${colis.id}/modifier`), cls: 'btn-primary' })
   if (colis.statut === 'RETOURNE' && isAdmin) actions.push({ label: 'Relivrer', icon: Send, action: () => changerStatut('RECU'), cls: 'btn-ghost' })
   if ((colis.statut === 'RECU' || colis.statut === 'EXPEDIE') && !verrou)
     actions.push({ label: 'Annuler', icon: XCircle, action: () => setShowCancel(true), cls: 'btn-danger' })
@@ -235,6 +236,19 @@ export function ColisDetailPage() {
             <button key={i} onClick={a.action} className={a.cls}><a.icon size={16} /> {a.label}</button>
           ))}
           <button onClick={() => window.print()} className="btn-ghost ml-auto"><Printer size={16} /> Imprimer étiquette</button>
+        </div>
+      )}
+
+      {colis.statut === 'BROUILLON' && (
+        <div className="card p-4 mb-4 border-warning-500/30 bg-warning-500/5 flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <FileText className="text-warning-300" size={20} />
+            <div>
+              <div className="text-sm font-semibold text-warning-300">Brouillon — informations incomplètes</div>
+              <div className="text-xs text-text-secondary">Complétez ce colis puis enregistrez pour le passer en statut « Reçu ».</div>
+            </div>
+          </div>
+          <button onClick={() => navigate(`/colis/${colis.id}/modifier`)} className="btn-primary"><Edit3 size={16} /> Compléter</button>
         </div>
       )}
 
@@ -281,24 +295,24 @@ export function ColisDetailPage() {
           <div className="card p-4">
             <h3 className="text-sm font-semibold text-gold-500 mb-3 flex items-center gap-2"><MapPin size={14} /> Destinataire</h3>
             <dl className="space-y-2 text-sm">
-              <div><dt className="text-text-muted">Nom</dt><dd className="font-medium">{colis.destinataire?.nom_complet}</dd></div>
-              <div><dt className="text-text-muted">Téléphone</dt><dd className="font-mono">{colis.destinataire?.telephone}</dd></div>
-              <div><dt className="text-text-muted">Ville</dt><dd className="font-medium text-gold-500">{colis.ville_destination}</dd></div>
-              <div><dt className="text-text-muted">Adresse</dt><dd>{colis.adresse_livraison}</dd></div>
+              <div><dt className="text-text-muted">Nom</dt><dd className="font-medium">{colis.destinataire?.nom_complet ?? <span className="text-text-muted">—</span>}</dd></div>
+              <div><dt className="text-text-muted">Téléphone</dt><dd className="font-mono">{colis.destinataire?.telephone ?? <span className="text-text-muted">—</span>}</dd></div>
+              <div><dt className="text-text-muted">Ville</dt><dd className="font-medium text-gold-500">{colis.ville_destination ?? <span className="text-text-muted">—</span>}</dd></div>
+              <div><dt className="text-text-muted">Adresse</dt><dd>{colis.adresse_livraison ?? <span className="text-text-muted">—</span>}</dd></div>
             </dl>
           </div>
           <div className="card p-4">
             <h3 className="text-sm font-semibold text-gold-500 mb-3">Expéditeur</h3>
             <dl className="space-y-2 text-sm">
-              <div><dt className="text-text-muted">Nom</dt><dd className="font-medium">{colis.client?.nom_complet}</dd></div>
-              <div><dt className="text-text-muted">Téléphone</dt><dd className="font-mono">{colis.client?.telephone}</dd></div>
-              <div><dt className="text-text-muted">Ville</dt><dd>{colis.client?.ville}</dd></div>
+              <div><dt className="text-text-muted">Nom</dt><dd className="font-medium">{colis.client?.nom_complet ?? <span className="text-text-muted">—</span>}</dd></div>
+              <div><dt className="text-text-muted">Téléphone</dt><dd className="font-mono">{colis.client?.telephone ?? <span className="text-text-muted">—</span>}</dd></div>
+              <div><dt className="text-text-muted">Ville</dt><dd>{colis.client?.ville ?? <span className="text-text-muted">—</span>}</dd></div>
             </dl>
           </div>
           <div className="card p-4">
             <h3 className="text-sm font-semibold text-gold-500 mb-3">Colis</h3>
             <dl className="space-y-2 text-sm">
-              <div><dt className="text-text-muted">Contenu</dt><dd>{colis.contenu}</dd></div>
+              <div><dt className="text-text-muted">Contenu</dt><dd>{colis.contenu ?? <span className="text-text-muted">—</span>}</dd></div>
               <div><dt className="text-text-muted">Priorité</dt><dd>{colis.priorite === 'EXPRESS' ? 'Express' : 'Normale'}</dd></div>
               {lignes.length > 0 && (
                 <div className="pt-2 border-t border-border mt-2">

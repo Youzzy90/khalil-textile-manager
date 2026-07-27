@@ -10,7 +10,7 @@ import { formatMontant, formatDate } from '../lib/format'
 import { STATUT_LABELS } from '../lib/labels'
 import type { Colis, ColisStatut, Livreur } from '../types/db'
 
-const STATUTS: ColisStatut[] = ['RECU', 'EXPEDIE', 'EN_LIVRAISON', 'LIVRE', 'RETOURNE', 'ANNULE']
+const STATUTS: ColisStatut[] = ['BROUILLON', 'RECU', 'EXPEDIE', 'EN_LIVRAISON', 'LIVRE', 'RETOURNE', 'ANNULE']
 
 export function ColisListPage() {
   const navigate = useNavigate()

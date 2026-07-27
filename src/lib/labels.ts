@@ -1,6 +1,7 @@
 import type { ColisStatut, MoyenPaiement, EcheancePaiement } from '../types/db'
 
 export const STATUT_LABELS: Record<ColisStatut, string> = {
+  BROUILLON: 'Brouillon',
   RECU: 'Reçu',
   EXPEDIE: 'Expédié',
   EN_LIVRAISON: 'En livraison',
@@ -10,6 +11,7 @@ export const STATUT_LABELS: Record<ColisStatut, string> = {
 }
 
 export const STATUT_COLORS: Record<ColisStatut, string> = {
+  BROUILLON: 'bg-bg-hover text-text-secondary border border-border border-dashed',
   RECU: 'bg-info-100/20 text-info-300 border border-info-500/30',
   EXPEDIE: 'bg-warning-100/20 text-warning-300 border border-warning-500/30',
   EN_LIVRAISON: 'bg-gold-100/20 text-gold-300 border border-gold-500/30',
