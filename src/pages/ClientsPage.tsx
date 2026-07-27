@@ -13,7 +13,7 @@ import type { Client } from '../types/db'
 interface Row extends Client { nb_commandes: number; total_depense: number }
 
 type ClientForm = { nom_complet: string; telephone: string; telephone2: string; email: string; ville: string; adresse: string; type: 'PARTICULIER' | 'ENTREPRISE'; notes: string }
-const empty: ClientForm = { nom_complet: '', telephone: '', telephone2: '', email: '', ville: 'Dakar', adresse: '', type: 'PARTICULIER', notes: '' }
+const empty: ClientForm = { nom_complet: '', telephone: '', telephone2: '', email: '', ville: '', adresse: '', type: 'PARTICULIER', notes: '' }
 
 export function ClientsPage() {
   const { utilisateur } = useAuth()
@@ -86,7 +86,7 @@ export function ClientsPage() {
   const columns: Column<Row>[] = [
     { key: 'nom', header: 'Nom', sortValue: r => r.nom_complet, render: r => <div><div className="font-medium text-text-primary">{r.nom_complet}</div><div className="text-xs text-text-muted">{r.type === 'PARTICULIER' ? 'Particulier' : 'Entreprise'}</div></div> },
     { key: 'tel', header: 'Téléphone', sortValue: r => r.telephone, render: r => <span className="font-mono text-sm">{r.telephone}</span> },
-    { key: 'ville', header: 'Ville', sortValue: r => r.ville, render: r => r.ville },
+    { key: 'ville', header: 'Ville', sortValue: r => r.ville, render: r => r.ville || <span className="text-text-muted">—</span> },
     { key: 'cmd', header: 'Commandes', sortValue: r => r.nb_commandes, render: r => <span className="font-mono">{r.nb_commandes}</span> },
     { key: 'total', header: 'Total dépensé', sortValue: r => r.total_depense, render: r => <span className="font-mono text-gold-500">{formatMontant(r.total_depense)}</span> },
     { key: 'date', header: 'Créé le', sortValue: r => r.created_at, render: r => formatDate(r.created_at) },
@@ -116,8 +116,8 @@ export function ClientsPage() {
           <div><label className="label">Téléphone *</label><input className="input" value={form.telephone} onChange={e => setForm(s => ({ ...s, telephone: e.target.value }))} /></div>
           <div><label className="label">Téléphone 2</label><input className="input" value={form.telephone2} onChange={e => setForm(s => ({ ...s, telephone2: e.target.value }))} /></div>
           <div><label className="label">Email</label><input className="input" value={form.email} onChange={e => setForm(s => ({ ...s, email: e.target.value }))} /></div>
-          <div><label className="label">Ville</label><input className="input" value={form.ville} onChange={e => setForm(s => ({ ...s, ville: e.target.value }))} /></div>
-          <div className="col-span-2"><label className="label">Adresse</label><input className="input" value={form.adresse} onChange={e => setForm(s => ({ ...s, adresse: e.target.value }))} /></div>
+          <div><label className="label">Ville <span className="text-text-muted font-normal">(optionnel)</span></label><input className="input" placeholder="Pas encore connue" value={form.ville} onChange={e => setForm(s => ({ ...s, ville: e.target.value }))} /></div>
+          <div className="col-span-2"><label className="label">Adresse <span className="text-text-muted font-normal">(optionnel)</span></label><input className="input" placeholder="Pas encore connue" value={form.adresse} onChange={e => setForm(s => ({ ...s, adresse: e.target.value }))} /></div>
           <div><label className="label">Type</label><select className="input" value={form.type} onChange={e => setForm(s => ({ ...s, type: e.target.value as 'PARTICULIER' | 'ENTREPRISE' }))}><option value="PARTICULIER">Particulier</option><option value="ENTREPRISE">Entreprise</option></select></div>
           <div className="col-span-2"><label className="label">Notes</label><textarea className="input" value={form.notes} onChange={e => setForm(s => ({ ...s, notes: e.target.value }))} /></div>
         </div>

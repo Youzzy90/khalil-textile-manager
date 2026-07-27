@@ -12,7 +12,7 @@ import type { Destinataire, Client } from '../types/db'
 
 interface Row extends Destinataire { nb_colis: number }
 
-const empty = { nom_complet: '', telephone: '', ville: 'Dakar', adresse: '', client_id: '', notes: '' }
+const empty = { nom_complet: '', telephone: '', ville: '', adresse: '', client_id: '', notes: '' }
 
 export function DestinatairesPage() {
   const { utilisateur } = useAuth()
@@ -50,7 +50,6 @@ export function DestinatairesPage() {
   async function save() {
     if (!form.nom_complet.trim()) { toast('error', 'Nom requis.'); return }
     if (!valideTelephone(form.telephone)) { toast('error', 'Téléphone invalide.'); return }
-    if (!form.adresse.trim()) { toast('error', 'Adresse requise (livraison physique).'); return }
     const payload = { nom_complet: form.nom_complet, telephone: form.telephone, ville: form.ville, adresse: form.adresse, client_id: form.client_id ? Number(form.client_id) : null, notes: form.notes || null }
     if (editId) {
       const { error } = await supabase.from('destinataire').update(payload).eq('id', editId)
@@ -80,8 +79,8 @@ export function DestinatairesPage() {
   const columns: Column<Row>[] = [
     { key: 'nom', header: 'Nom', sortValue: r => r.nom_complet, render: r => <span className="font-medium">{r.nom_complet}</span> },
     { key: 'tel', header: 'Téléphone', sortValue: r => r.telephone, render: r => <span className="font-mono">{r.telephone}</span> },
-    { key: 'ville', header: 'Ville', sortValue: r => r.ville, render: r => r.ville },
-    { key: 'adresse', header: 'Adresse', render: r => <span className="text-text-secondary text-xs">{r.adresse}</span> },
+    { key: 'ville', header: 'Ville', sortValue: r => r.ville, render: r => r.ville || <span className="text-text-muted">—</span> },
+    { key: 'adresse', header: 'Adresse', render: r => <span className="text-text-secondary text-xs">{r.adresse || <span className="text-text-muted">—</span>}</span> },
     { key: 'nb', header: 'Colis', sortValue: r => r.nb_colis, render: r => <span className="font-mono">{r.nb_colis}</span> },
     { key: 'date', header: 'Créé le', sortValue: r => r.created_at, render: r => formatDate(r.created_at) },
     { key: 'actions', header: '', render: r => (
@@ -106,8 +105,8 @@ export function DestinatairesPage() {
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2"><label className="label">Nom complet *</label><input className="input" value={form.nom_complet} onChange={e => setForm(s => ({ ...s, nom_complet: e.target.value }))} /></div>
           <div><label className="label">Téléphone *</label><input className="input" value={form.telephone} onChange={e => setForm(s => ({ ...s, telephone: e.target.value }))} /></div>
-          <div><label className="label">Ville</label><input className="input" value={form.ville} onChange={e => setForm(s => ({ ...s, ville: e.target.value }))} /></div>
-          <div className="col-span-2"><label className="label">Adresse *</label><input className="input" value={form.adresse} onChange={e => setForm(s => ({ ...s, adresse: e.target.value }))} /></div>
+          <div><label className="label">Ville <span className="text-text-muted font-normal">(optionnel)</span></label><input className="input" placeholder="Pas encore connue" value={form.ville} onChange={e => setForm(s => ({ ...s, ville: e.target.value }))} /></div>
+          <div className="col-span-2"><label className="label">Adresse <span className="text-text-muted font-normal">(optionnel)</span></label><input className="input" placeholder="Pas encore connue" value={form.adresse} onChange={e => setForm(s => ({ ...s, adresse: e.target.value }))} /></div>
           <div className="col-span-2"><label className="label">Client lié (optionnel)</label>
             <select className="input" value={form.client_id} onChange={e => setForm(s => ({ ...s, client_id: e.target.value }))}>
               <option value="">Aucun</option>

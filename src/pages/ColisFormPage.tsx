@@ -200,7 +200,7 @@ export function ColisFormPage() {
   async function quickClient() {
     if (!qClient.nom || !valideTelephone(qClient.tel)) { toast('error', "Nom et téléphone valides requis."); return }
     const { data, error } = await supabase.from('client').insert({
-      nom_complet: qClient.nom, telephone: qClient.tel, ville: qClient.ville || 'Dakar',
+      nom_complet: qClient.nom, telephone: qClient.tel, ville: qClient.ville || '',
       type: 'PARTICULIER',
     }).select().single()
     if (error) { toast('error', error.message); return }
@@ -213,9 +213,9 @@ export function ColisFormPage() {
   }
 
   async function quickDest() {
-    if (!qDest.nom || !valideTelephone(qDest.tel) || !qDest.adresse) { toast('error', "Nom, téléphone et adresse requis."); return }
+    if (!qDest.nom || !valideTelephone(qDest.tel)) { toast('error', "Nom et téléphone requis."); return }
     const { data, error } = await supabase.from('destinataire').insert({
-      nom_complet: qDest.nom, telephone: qDest.tel, ville: qDest.ville || 'Dakar', adresse: qDest.adresse,
+      nom_complet: qDest.nom, telephone: qDest.tel, ville: qDest.ville || '', adresse: qDest.adresse,
     }).select().single()
     if (error) { toast('error', error.message); return }
     const nd = data as Destinataire
@@ -232,7 +232,6 @@ export function ColisFormPage() {
     if (!form.client_id) { toast('error', "Sélectionnez un expéditeur."); return }
     if (!memeDestinataire && !form.destinataire_id) { toast('error', "Sélectionnez un destinataire."); return }
     if (!form.contenu.trim()) { toast('error', "Le contenu est obligatoire."); return }
-    if (!form.retrait_comptoir && !form.ville_destination) { toast('error', "Ville de destination requise (ou activez « retrait au comptoir »)."); return }
 
     setSaving(true)
     try {
@@ -287,8 +286,8 @@ export function ColisFormPage() {
         destinataire_id: destinataireId,
         livreur_id: form.retrait_comptoir ? null : (form.livreur_id ? Number(form.livreur_id) : null),
         contenu: form.contenu.trim(),
-        ville_destination: form.retrait_comptoir ? (form.ville_destination || 'Comptoir') : form.ville_destination,
-        adresse_livraison: form.adresse_livraison,
+        ville_destination: form.retrait_comptoir ? (form.ville_destination || 'Comptoir') : (form.ville_destination || ''),
+        adresse_livraison: form.adresse_livraison || '',
         montant: montantFinal,
         frais_livraison: fraisFinal,
         mode_paiement_attendu: form.mode_paiement_attendu,
@@ -570,9 +569,9 @@ export function ColisFormPage() {
             <>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="label">Ville destination *</label>
+                  <label className="label">Ville destination <span className="text-text-muted font-normal">(optionnel)</span></label>
                   <select className="input" value={form.ville_destination} onChange={e => onVilleChange(e.target.value)}>
-                    <option value="">— Sélectionner —</option>
+                    <option value="">— Pas encore connue —</option>
                     {villes.map(v => <option key={v.id} value={v.nom}>{v.nom}</option>)}
                   </select>
                   {form.ville_destination && (() => {
@@ -581,28 +580,28 @@ export function ColisFormPage() {
                   })()}
                 </div>
                 <div className="md:col-span-2">
-                  <label className="label">Adresse de livraison *</label>
-                  <input className="input" value={form.adresse_livraison} onChange={e => set('adresse_livraison', e.target.value)} />
+                  <label className="label">Adresse de livraison <span className="text-text-muted font-normal">(optionnel)</span></label>
+                  <input className="input" placeholder="Pas encore connue" value={form.adresse_livraison} onChange={e => set('adresse_livraison', e.target.value)} />
                 </div>
               </div>
               <div className="mt-3 rounded-lg border border-border bg-bg-soft/50 p-3">
                 <div className="flex items-center justify-between mb-2">
                   <label className="label mb-0">Livreur affecté</label>
-                  {form.ville_destination && (() => {
+                  {form.ville_destination ? (() => {
                     const dispo = livreurs.filter(l => zonesInclude(l.zones, form.ville_destination))
                     return dispo.length > 0
                       ? <span className="badge bg-success-500/10 text-success-500 border border-success-500/30"><Sparkles size={11} /> Auto · {dispo.length} dispo</span>
                       : <span className="badge bg-warning-100/20 text-warning-300 border border-warning-500/30">Aucun livreur pour cette zone</span>
-                  })()}
+                  })() : <span className="badge bg-bg-hover text-text-muted border border-border">Zone inconnue</span>}
                 </div>
-                <select className="input" value={form.livreur_id} onChange={e => set('livreur_id', e.target.value)}>
-                  <option value="">Non affecté</option>
+                <select className="input" value={form.livreur_id} onChange={e => set('livreur_id', e.target.value)} disabled={!form.ville_destination}>
+                  <option value="">{form.ville_destination ? 'Non affecté' : '— Renseignez la ville —'}</option>
                   {livreurs.map(l => {
                     const couvre = form.ville_destination && zonesInclude(l.zones, form.ville_destination)
                     return <option key={l.id} value={l.id}>{l.nom_complet}{couvre ? ' ✓' : ''}</option>
                   })}
                 </select>
-                <p className="text-xs text-text-muted mt-2 flex items-center gap-1.5"><MapPin size={12} /> Le livreur est choisi automatiquement selon la zone de livraison.</p>
+                <p className="text-xs text-text-muted mt-2 flex items-center gap-1.5"><MapPin size={12} /> Dès que la ville de livraison est connue, le livreur couvrant cette zone est attribué automatiquement avec son frais de livraison.</p>
               </div>
             </>
           )}
@@ -691,7 +690,7 @@ export function ColisFormPage() {
             <div className="space-y-3">
               <div><label className="label">Nom complet *</label><input className="input" value={qClient.nom} onChange={e => setQClient(s => ({ ...s, nom: e.target.value }))} /></div>
               <div><label className="label">Téléphone *</label><input className="input" value={qClient.tel} onChange={e => setQClient(s => ({ ...s, tel: e.target.value }))} /></div>
-              <div><label className="label">Ville</label><select className="input" value={qClient.ville} onChange={e => setQClient(s => ({ ...s, ville: e.target.value }))}><option value="">— Sélectionner —</option>{villes.map(v => <option key={v.id} value={v.nom}>{v.nom}</option>)}</select></div>
+              <div><label className="label">Ville <span className="text-text-muted font-normal">(optionnel)</span></label><select className="input" value={qClient.ville} onChange={e => setQClient(s => ({ ...s, ville: e.target.value }))}><option value="">— Pas encore connue —</option>{villes.map(v => <option key={v.id} value={v.nom}>{v.nom}</option>)}</select></div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={() => setShowClient(false)} className="btn-ghost">Annuler</button>
@@ -710,8 +709,8 @@ export function ColisFormPage() {
             <div className="space-y-3">
               <div><label className="label">Nom complet *</label><input className="input" value={qDest.nom} onChange={e => setQDest(s => ({ ...s, nom: e.target.value }))} /></div>
               <div><label className="label">Téléphone *</label><input className="input" value={qDest.tel} onChange={e => setQDest(s => ({ ...s, tel: e.target.value }))} /></div>
-              <div><label className="label">Ville</label><select className="input" value={qDest.ville} onChange={e => setQDest(s => ({ ...s, ville: e.target.value }))}><option value="">— Sélectionner —</option>{villes.map(v => <option key={v.id} value={v.nom}>{v.nom}</option>)}</select></div>
-              <div><label className="label">Adresse *</label><input className="input" value={qDest.adresse} onChange={e => setQDest(s => ({ ...s, adresse: e.target.value }))} /></div>
+              <div><label className="label">Ville <span className="text-text-muted font-normal">(optionnel)</span></label><select className="input" value={qDest.ville} onChange={e => setQDest(s => ({ ...s, ville: e.target.value }))}><option value="">— Pas encore connue —</option>{villes.map(v => <option key={v.id} value={v.nom}>{v.nom}</option>)}</select></div>
+              <div><label className="label">Adresse <span className="text-text-muted font-normal">(optionnel)</span></label><input className="input" placeholder="Pas encore connue" value={qDest.adresse} onChange={e => setQDest(s => ({ ...s, adresse: e.target.value }))} /></div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={() => setShowDest(false)} className="btn-ghost">Annuler</button>
