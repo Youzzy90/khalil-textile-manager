@@ -235,7 +235,7 @@ export function ColisFormPage() {
     if (!hasMinimal) {
       toast('error', "Renseignez au moins un expéditeur, un destinataire ou un contenu pour enregistrer."); return
     }
-    if (!asDraft) {
+    if (!asDraft && !(editMode && originalStatut !== 'BROUILLON')) {
       const manquants: string[] = []
       if (!form.client_id) manquants.push('expéditeur')
       if (!memeDestinataire && !form.destinataire_id) manquants.push('destinataire')
@@ -691,9 +691,9 @@ export function ColisFormPage() {
 
         <div className="flex justify-end gap-2 pt-3 border-t border-border">
           <button onClick={() => navigate(-1)} className="btn-ghost">Annuler</button>
-          {!editMode && <button onClick={() => save(true)} disabled={saving} className="btn-secondary">
+          {(!editMode || originalStatut === 'BROUILLON') && <button onClick={() => save(true)} disabled={saving} className="btn-secondary">
             {saving ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
-            Enregistrer comme brouillon
+            {editMode ? 'Enregistrer le brouillon' : 'Enregistrer comme brouillon'}
           </button>}
           <button onClick={() => save(false)} disabled={saving} className="btn-primary">
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
@@ -743,3 +743,4 @@ export function ColisFormPage() {
     </div>
   )
 }
+
