@@ -11,7 +11,7 @@ import { DestinatairesPage } from './pages/DestinatairesPage'
 import { LivreursPage } from './pages/LivreursPage'
 import { PaiementsPage } from './pages/PaiementsPage'
 import { ComptabilitePage } from './pages/ComptabilitePage'
-import { TourneesPage } from './pages/TourneesPage'
+import { StocksPage } from './pages/StocksPage'
 import { UtilisateursPage } from './pages/UtilisateursPage'
 import { ParametresPage } from './pages/ParametresPage'
 import { Loader2 } from 'lucide-react'
@@ -46,7 +46,7 @@ export default function App() {
             <Route path="/livreurs" element={<LivreursPage />} />
             <Route path="/paiements" element={<PaiementsPage />} />
             <Route path="/comptabilite" element={<ComptabilitePage />} />
-            <Route path="/tournees" element={<TourneesPage />} />
+            <Route path="/stocks" element={<StocksPage />} />
             <Route path="/utilisateurs" element={<UtilisateursPage />} />
             <Route path="/parametres" element={<ParametresPage />} />
           </Route>

@@ -10,7 +10,7 @@ import { formatMontant, formatDate } from '../lib/format'
 import { STATUT_LABELS } from '../lib/labels'
 import type { Colis, ColisStatut, Livreur } from '../types/db'
 
-const STATUTS: ColisStatut[] = ['BROUILLON', 'RECU', 'EXPEDIE', 'EN_LIVRAISON', 'LIVRE', 'RETOURNE', 'ANNULE']
+const STATUTS: ColisStatut[] = ['RECU', 'EXPEDIE', 'EN_LIVRAISON', 'LIVRE', 'RETOURNE', 'ANNULE']
 
 export function ColisListPage() {
   const navigate = useNavigate()
@@ -35,7 +35,7 @@ export function ColisListPage() {
   async function load() {
     setLoading(true)
     let q = supabase.from('colis').select(`
-      id,code,statut,montant,frais_livraison,montant_paye,paye,priorite,ville_destination,date_reception,
+      id,code,statut,montant,montant_paye,paye,priorite,ville_destination,date_reception,
       client:client(id,nom_complet,telephone,ville),
       destinataire:destinataire(id,nom_complet,telephone,ville),
       livreur:livreur(id,nom_complet)
@@ -80,7 +80,7 @@ export function ColisListPage() {
     { key: 'client', header: 'Expéditeur', sortValue: r => r.client?.nom_complet ?? '', render: r => <span className="text-text-primary">{r.client?.nom_complet ?? '—'}</span> },
     { key: 'destinataire', header: 'Destinataire', sortValue: r => r.destinataire?.nom_complet ?? '', render: r => <span>{r.destinataire?.nom_complet ?? '—'}</span> },
     { key: 'ville', header: 'Ville', sortValue: r => r.ville_destination, render: r => r.ville_destination },
-    { key: 'montant', header: 'Montant', sortValue: r => r.echeance_paiement === 'AVANCE' ? Number(r.montant) + Number(r.frais_livraison) : Number(r.montant), render: r => <span className="font-mono">{formatMontant(r.echeance_paiement === 'AVANCE' ? Number(r.montant) + Number(r.frais_livraison) : Number(r.montant))}</span> },
+    { key: 'montant', header: 'Montant', sortValue: r => r.montant, render: r => <span className="font-mono">{formatMontant(r.montant)}</span> },
     { key: 'paye', header: 'Payé', sortValue: r => (r.paye ? 1 : 0), render: r => r.paye
       ? <span className="badge bg-success-100/20 text-success-300 border border-success-500/30">Payé</span>
       : <span className="badge bg-warning-100/20 text-warning-300 border border-warning-500/30">Impayé</span> },

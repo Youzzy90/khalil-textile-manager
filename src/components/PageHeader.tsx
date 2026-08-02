@@ -12,17 +12,17 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, search, actions, onAdd, addLabel = 'Nouveau' }: PageHeaderProps) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+    <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
       <div className="min-w-0">
-        <h1 className="text-xl font-bold tracking-tight">{title}</h1>
-        {subtitle && <p className="text-sm text-text-secondary mt-1">{subtitle}</p>}
+        <h1 className="text-xl font-bold text-text-primary">{title}</h1>
+        {subtitle && <p className="text-sm text-text-secondary mt-0.5">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-2">
         {search && (
           <div className="relative">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             <input
-              className="input pl-10 w-64 bg-bg-soft/80"
+              className="input pl-9 w-64"
               placeholder={search.placeholder ?? 'Rechercher…'}
               value={search.value}
               onChange={e => search.onChange(e.target.value)}

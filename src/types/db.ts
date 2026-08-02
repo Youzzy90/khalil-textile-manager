@@ -3,12 +3,10 @@
 export type Role = 'ADMIN' | 'EMPLOYE'
 
 export type ColisStatut =
-  | 'BROUILLON' | 'RECU' | 'EXPEDIE' | 'EN_LIVRAISON' | 'LIVRE' | 'RETOURNE' | 'ANNULE'
+  | 'RECU' | 'EXPEDIE' | 'EN_LIVRAISON' | 'LIVRE' | 'RETOURNE' | 'ANNULE'
 
 export type MoyenPaiement =
-  | 'ESPECES' | 'WAVE' | 'ORANGE_MONEY' | 'CARTE' | 'VIREMENT'
-
-export type EcheancePaiement = 'AVANCE' | 'LIVRAISON'
+  | 'ESPECES' | 'WAVE' | 'ORANGE_MONEY' | 'CARTE' | 'VIREMENT' | 'PORT_PAYE' | 'A_LIVRAISON'
 
 export type SensEcriture = 'ENTREE' | 'SORTIE'
 
@@ -72,7 +70,7 @@ export interface Livreur {
   zones: string | null
   statut: 'ACTIF' | 'INACTIF' | 'EN_CONGE'
   date_embauche: string | null
-  type_commission: 'PORT' | 'FIXE' | 'AUCUNE'
+  type_commission: 'FIXE' | 'POURCENTAGE' | 'AUCUNE'
   valeur_commission: number
   notes: string | null
   supprime: boolean
@@ -87,18 +85,15 @@ export interface Colis {
   destinataire_id: number
   livreur_id: number | null
   contenu: string
-  poids: number | null
+  poids: number
   valeur_declaree: number
   ville_destination: string
   adresse_livraison: string
   montant: number
-  frais_livraison: number
   montant_paye: number
   mode_paiement_attendu: MoyenPaiement
-  echeance_paiement: EcheancePaiement
   priorite: 'NORMALE' | 'EXPRESS'
   fragile: boolean
-  retrait_comptoir: boolean
   statut: ColisStatut
   paye: boolean
   date_reception: string
@@ -254,15 +249,4 @@ export interface CommissionLivreur {
   date_paiement: string | null
   livreur?: Pick<Livreur, 'nom_complet'>
   colis?: Pick<Colis, 'code'>
-}
-
-export interface LigneColis {
-  id: number
-  colis_id: number
-  article_id: number | null
-  designation: string
-  quantite: number
-  prix_unitaire: number
-  montant: number
-  created_at: string
 }

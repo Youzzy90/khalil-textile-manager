@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, TrendingUp, TrendingDown, Wallet, BarChart3, LineChart as LineChartIcon, Trash2, AlertTriangle, Loader2 } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, Wallet, BarChart3 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { logActivite, genererNumeroEcriture } from '../lib/audit'
@@ -19,8 +19,6 @@ export function ComptabilitePage() {
   const [periode, setPeriode] = useState<'jour' | 'semaine' | 'mois' | 'annee' | 'tout'>('mois')
   const [showCharge, setShowCharge] = useState(false)
   const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10), categorie: 'CHARGE_CARBURANT', libelle: '', montant: '', moyen: 'ESPECES', beneficiaire: '', notes: '' })
-  const [toDelete, setToDelete] = useState<EcritureComptable | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { load() }, [periode])
 
@@ -35,24 +33,6 @@ export function ComptabilitePage() {
     const { data } = await q.limit(1000)
     setRows((data as EcritureComptable[]) ?? [])
     setLoading(false)
-  }
-
-  async function supprimerEcriture() {
-    if (!utilisateur || !toDelete) return
-    setDeleting(true)
-    try {
-      const { error: e1 } = await supabase.from('ecriture_comptable').update({ supprime: true }).eq('id', toDelete.id)
-      if (e1) throw e1
-      if (toDelete.charge_id) {
-        await supabase.from('charge').update({ supprime: true }).eq('id', toDelete.charge_id)
-      }
-      await logActivite(utilisateur, 'COMPTA', 'ECRITURE_DELETE', { type: 'ecriture_comptable', id: toDelete.id }, { montant: toDelete.montant, libelle: toDelete.libelle })
-      toast('success', 'Écriture supprimée.')
-      setToDelete(null)
-      load()
-    } catch (e: any) {
-      toast('error', e.message ?? String(e))
-    } finally { setDeleting(false) }
   }
 
   async function saveCharge() {
@@ -96,13 +76,6 @@ export function ComptabilitePage() {
     { key: 'lib', header: 'Libellé', render: r => r.libelle },
     { key: 'montant', header: 'Montant', sortValue: r => r.montant, render: r => <span className={`font-mono font-semibold ${r.sens === 'ENTREE' ? 'text-success-500' : 'text-danger-500'}`}>{r.sens === 'ENTREE' ? '+' : '−'} {formatMontant(r.montant)}</span> },
     { key: 'auto', header: 'Type', sortValue: r => r.automatique ? 1 : 0, render: r => r.automatique ? <span className="text-xs text-text-muted">Auto</span> : <span className="text-xs text-text-secondary">Manuel</span> },
-    { key: 'actions', header: '', render: r => (
-      <button onClick={(e) => { e.stopPropagation(); setToDelete(r) }}
-        className="p-1.5 rounded-lg text-text-muted hover:text-danger-400 hover:bg-danger-500/10 transition-colors"
-        title="Supprimer cette écriture">
-        <Trash2 size={15} />
-      </button>
-    ) },
   ]
 
   return (
@@ -117,52 +90,6 @@ export function ComptabilitePage() {
         <StatCard label="Charges" value={formatMontant(charges)} icon={TrendingDown} />
         <StatCard label="Bénéfice" value={formatMontant(benefice)} icon={Wallet} accent />
       </div>
-
-      {(() => {
-        const jours: { jour: string; entrees: number; sorties: number }[] = []
-        const map = new Map<string, { entrees: number; sorties: number }>()
-        rows.forEach(r => {
-          const d = new Date(r.date_ecriture)
-          const key = d.toISOString().slice(0, 10)
-          if (!map.has(key)) map.set(key, { entrees: 0, sorties: 0 })
-          const v = map.get(key)!
-          if (r.sens === 'ENTREE') v.entrees += Number(r.montant); else v.sorties += Number(r.montant)
-        })
-        const sorted = Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0])).slice(-14)
-        sorted.forEach(([key, v]) => {
-          const d = new Date(key)
-          jours.push({ jour: d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), entrees: v.entrees, sorties: v.sorties })
-        })
-        const maxVal = Math.max(...jours.map(j => Math.max(j.entrees, j.sorties)), 1)
-        if (jours.length === 0) return null
-        return (
-          <div className="card p-5 mb-4 animate-fadeIn">
-            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><LineChartIcon size={16} className="text-gold-500" /> Évolution des entrées / sorties (14 derniers jours)</h3>
-            <div className="flex items-end gap-1.5 h-44 relative">
-              {jours.map((j, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-                  <div className="flex-1 flex items-end gap-0.5 w-full justify-center">
-                    <div className="relative w-1/2 max-w-[14px] bg-success-500/20 rounded-t-sm overflow-hidden flex items-end">
-                      <div className="w-full bg-success-500 rounded-t-sm transition-all duration-500 group-hover:brightness-125" style={{ height: `${Math.max((j.entrees / maxVal) * 100, 2)}%` }} title={`Entrées: ${formatMontant(j.entrees)}`} />
-                    </div>
-                    <div className="relative w-1/2 max-w-[14px] bg-danger-500/20 rounded-t-sm overflow-hidden flex items-end">
-                      <div className="w-full bg-danger-500 rounded-t-sm transition-all duration-500 group-hover:brightness-125" style={{ height: `${Math.max((j.sorties / maxVal) * 100, 2)}%` }} title={`Sorties: ${formatMontant(j.sorties)}`} />
-                    </div>
-                  </div>
-                  <span className="text-[9px] text-text-muted">{j.jour}</span>
-                  <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition pointer-events-none bg-bg-elevated border border-border rounded-md px-2 py-1 text-[10px] whitespace-nowrap z-10 shadow-float">
-                    <span className="text-success-500">+{formatMontant(j.entrees)}</span> · <span className="text-danger-500">−{formatMontant(j.sorties)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-center gap-4 mt-3 text-xs text-text-muted">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-success-500 rounded-sm" /> Entrées</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-danger-500 rounded-sm" /> Sorties</span>
-            </div>
-          </div>
-        )
-      })()}
 
       <div className="flex gap-2 mb-4">
         {(['jour', 'semaine', 'mois', 'annee', 'tout'] as const).map(p => (
@@ -213,36 +140,6 @@ export function ComptabilitePage() {
           <div className="col-span-2"><label className="label">Notes</label><textarea className="input" value={form.notes} onChange={e => setForm(s => ({ ...s, notes: e.target.value }))} /></div>
         </div>
       </Modal>
-
-      {toDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => !deleting && setToDelete(null)}>
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="card p-5 w-full max-w-md relative animate-scaleIn" onClick={e => e.stopPropagation()}>
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-danger-500/10 flex items-center justify-center shrink-0">
-                <AlertTriangle size={20} className="text-danger-400" />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold">Supprimer cette écriture ?</h3>
-                <p className="text-sm text-text-secondary mt-1">Cette action est définitive. L'écriture sera retirée du journal comptable.</p>
-              </div>
-            </div>
-            <div className="rounded-lg border border-border bg-bg-soft/50 p-3 space-y-1.5 mb-4 text-sm">
-              <div className="flex justify-between"><span className="text-text-muted">N°</span><span className="font-mono text-gold-500">{toDelete.numero}</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">Libellé</span><span className="font-medium">{toDelete.libelle}</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">Montant</span><span className={`font-mono font-semibold ${toDelete.sens === 'ENTREE' ? 'text-success-500' : 'text-danger-500'}`}>{toDelete.sens === 'ENTREE' ? '+' : '−'} {formatMontant(toDelete.montant)}</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">Date</span><span>{formatDate(toDelete.date_ecriture, true)}</span></div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setToDelete(null)} disabled={deleting} className="btn-ghost">Annuler</button>
-              <button onClick={supprimerEcriture} disabled={deleting} className="btn-danger">
-                {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                Supprimer définitivement
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

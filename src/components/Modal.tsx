@@ -23,16 +23,16 @@ export function Modal({ open, onClose, title, children, size = 'md', footer }: M
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
-      <div className={`relative card w-full ${widths[size]} max-h-[90vh] flex flex-col animate-scaleIn shadow-float`}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-panel-grad">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative card w-full ${widths[size]} max-h-[90vh] flex flex-col animate-scaleIn`}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <h2 className="text-base font-semibold text-text-primary">{title}</h2>
-          <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg hover:bg-bg-hover" aria-label="Fermer">
+          <button onClick={onClose} className="btn-ghost p-1.5 rounded-md" aria-label="Fermer">
             <X size={18} />
           </button>
         </div>
-        <div className="px-5 py-5 overflow-y-auto flex-1">{children}</div>
-        {footer && <div className="px-5 py-3.5 border-t border-border flex justify-end gap-2 bg-bg-soft/50">{footer}</div>}
+        <div className="px-5 py-4 overflow-y-auto flex-1">{children}</div>
+        {footer && <div className="px-5 py-3 border-t border-border flex justify-end gap-2">{footer}</div>}
       </div>
     </div>
   )

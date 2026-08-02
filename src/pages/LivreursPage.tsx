@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Edit3, Trash2, Truck, Banknote, MapPin, X } from 'lucide-react'
+import { Plus, Edit3, Trash2, Truck, Banknote } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { logActivite, genererNumeroEcriture } from '../lib/audit'
@@ -9,19 +9,17 @@ import { Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { valideTelephone, formatDate, formatMontant } from '../lib/format'
 import { VEHICULE_LABELS, COMMISSION_LABELS, LIVREUR_STATUT_LABELS } from '../lib/labels'
-// plaque & date_embauche supprimés ; commission en montant fixe uniquement
-import { parseZones } from '../lib/zones'
-import type { Livreur, CommissionLivreur, Ville } from '../types/db'
+import type { Livreur, CommissionLivreur } from '../types/db'
 
-interface Row extends Livreur { en_cours: number; livres: number; commission_due: number; zoneList: string[] }
+interface Row extends Livreur { en_cours: number; livres: number; commission_due: number }
 
 type LivreurForm = {
-  nom_complet: string; telephone: string; type_vehicule: Livreur['type_vehicule']; zones: string[];
-  statut: Livreur['statut']; type_commission: Livreur['type_commission']; valeur_commission: string; notes: string;
+  nom_complet: string; telephone: string; type_vehicule: Livreur['type_vehicule']; plaque: string; zones: string;
+  statut: Livreur['statut']; date_embauche: string; type_commission: Livreur['type_commission']; valeur_commission: string; notes: string;
 }
 const empty: LivreurForm = {
-  nom_complet: '', telephone: '', type_vehicule: 'MOTO', zones: [],
-  statut: 'ACTIF', type_commission: 'PORT', valeur_commission: '0', notes: '',
+  nom_complet: '', telephone: '', type_vehicule: 'MOTO', plaque: '', zones: '',
+  statut: 'ACTIF', date_embauche: '', type_commission: 'AUCUNE', valeur_commission: '0', notes: '',
 }
 
 export function LivreursPage() {
@@ -35,10 +33,8 @@ export function LivreursPage() {
   const [form, setForm] = useState<LivreurForm>(empty)
   const [commissions, setCommissions] = useState<CommissionLivreur[]>([])
   const [showComm, setShowComm] = useState(false)
-  const [villes, setVilles] = useState<Ville[]>([])
-  const [zoneInput, setZoneInput] = useState('')
 
-  useEffect(() => { load(); supabase.from('ville').select('*').eq('actif', true).order('nom').then(({ data }) => setVilles((data as Ville[]) ?? [])) }, [])
+  useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
@@ -55,29 +51,18 @@ export function LivreursPage() {
     const { data: comms } = await supabase.from('commission_livreur').select('montant,payee,livreur_id').in('livreur_id', ids)
     const due = new Map<number, number>()
     ;(comms ?? []).forEach((c: any) => { if (!c.payee) due.set(c.livreur_id, (due.get(c.livreur_id) ?? 0) + Number(c.montant)) })
-    setRows(livs.map(l => ({ ...l, en_cours: enCours.get(l.id) ?? 0, livres: livres.get(l.id) ?? 0, commission_due: due.get(l.id) ?? 0, zoneList: parseZones(l.zones) })))
+    setRows(livs.map(l => ({ ...l, en_cours: enCours.get(l.id) ?? 0, livres: livres.get(l.id) ?? 0, commission_due: due.get(l.id) ?? 0 })))
     setLoading(false)
   }
 
-  function openNew() { setEditId(null); setForm(empty); setZoneInput(''); setOpen(true) }
-
-  function addZone(v: string) {
-    const z = v.trim().toLowerCase()
-    if (!z) return
-    setForm(s => s.zones.includes(z) ? s : { ...s, zones: [...s.zones, z] })
-    setZoneInput('')
-  }
-  function removeZone(z: string) {
-    setForm(s => ({ ...s, zones: s.zones.filter(x => x !== z) }))
-  }
+  function openNew() { setEditId(null); setForm(empty); setOpen(true) }
   function openEdit(l: Livreur) {
     setEditId(l.id)
     setForm({
-      nom_complet: l.nom_complet, telephone: l.telephone, type_vehicule: l.type_vehicule,
-      zones: parseZones(l.zones), statut: l.statut,
+      nom_complet: l.nom_complet, telephone: l.telephone, type_vehicule: l.type_vehicule, plaque: l.plaque ?? '',
+      zones: l.zones ?? '', statut: l.statut, date_embauche: l.date_embauche ?? '',
       type_commission: l.type_commission, valeur_commission: String(l.valeur_commission), notes: l.notes ?? '',
     })
-    setZoneInput('')
     setOpen(true)
   }
 
@@ -86,8 +71,8 @@ export function LivreursPage() {
     if (!valideTelephone(form.telephone)) { toast('error', 'Téléphone invalide.'); return }
     const payload = {
       nom_complet: form.nom_complet, telephone: form.telephone, type_vehicule: form.type_vehicule,
-      zones: form.zones.length ? form.zones.join(',') : null, statut: form.statut,
-      type_commission: form.type_commission,
+      plaque: form.plaque || null, zones: form.zones || null, statut: form.statut,
+      date_embauche: form.date_embauche || null, type_commission: form.type_commission,
       valeur_commission: Number(form.valeur_commission) || 0, notes: form.notes || null,
     }
     if (editId) {
@@ -141,22 +126,14 @@ export function LivreursPage() {
   const filtered = rows.filter(r => !search || r.nom_complet.toLowerCase().includes(search.toLowerCase()) || r.telephone.includes(search))
 
   const columns: Column<Row>[] = [
-    { key: 'nom', header: 'Nom', sortValue: r => r.nom_complet, render: r => <div><div className="font-medium">{r.nom_complet}</div><div className="text-xs text-text-muted">{VEHICULE_LABELS[r.type_vehicule]}</div></div> },
+    { key: 'nom', header: 'Nom', sortValue: r => r.nom_complet, render: r => <div><div className="font-medium">{r.nom_complet}</div><div className="text-xs text-text-muted">{VEHICULE_LABELS[r.type_vehicule]}{r.plaque ? ` · ${r.plaque}` : ''}</div></div> },
     { key: 'tel', header: 'Téléphone', sortValue: r => r.telephone, render: r => <span className="font-mono">{r.telephone}</span> },
     { key: 'statut', header: 'Statut', sortValue: r => r.statut, render: r => {
       const c = r.statut === 'ACTIF' ? 'bg-success-100/20 text-success-300 border border-success-500/30' : r.statut === 'EN_CONGE' ? 'bg-warning-100/20 text-warning-300 border border-warning-500/30' : 'bg-bg-hover text-text-secondary border border-border'
       return <span className={`badge ${c}`}>{LIVREUR_STATUT_LABELS[r.statut]}</span>
     } },
-    { key: 'zones', header: 'Zones', sortValue: r => r.zoneList.length, render: r => r.zoneList.length === 0
-      ? <span className="text-xs text-text-muted">—</span>
-      : <div className="flex flex-wrap gap-1 max-w-[180px]">{r.zoneList.slice(0, 3).map(z => <span key={z} className="badge bg-gold-500/10 text-gold-500 border border-gold-500/30 capitalize text-[10px]"><MapPin size={9} /> {z}</span>)}{r.zoneList.length > 3 && <span className="text-[10px] text-text-muted">+{r.zoneList.length - 3}</span>}</div> },
     { key: 'encours', header: 'En cours', sortValue: r => r.en_cours, render: r => <span className="font-mono">{r.en_cours}</span> },
     { key: 'livres', header: 'Livrés', sortValue: r => r.livres, render: r => <span className="font-mono text-success-500">{r.livres}</span> },
-    { key: 'typecomm', header: 'Commission', sortValue: r => r.type_commission, render: r => {
-      if (r.type_commission === 'PORT') return <span className="badge bg-info-100/20 text-info-300 border border-info-500/30 text-[10px]">Frais de livraison</span>
-      if (r.type_commission === 'FIXE') return <span className="badge bg-gold-500/10 text-gold-500 border border-gold-500/30 text-[10px]">{formatMontant(r.valeur_commission)}/colis</span>
-      return <span className="text-xs text-text-muted">Aucune</span>
-    } },
     { key: 'comm', header: 'Commission due', sortValue: r => r.commission_due, render: r => <span className={`font-mono ${r.commission_due > 0 ? 'text-gold-500' : 'text-text-muted'}`}>{formatMontant(r.commission_due)}</span> },
     { key: 'actions', header: '', render: r => (
       <div className="flex gap-1 justify-end">
@@ -184,43 +161,16 @@ export function LivreursPage() {
           <div><label className="label">Type de véhicule</label><select className="input" value={form.type_vehicule} onChange={e => setForm(s => ({ ...s, type_vehicule: e.target.value as Livreur['type_vehicule'] }))}>
             {Object.entries(VEHICULE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select></div>
-
-          <div className="col-span-2">
-            <label className="label">Zones de livraison</label>
-            <div className="flex flex-wrap gap-1.5 mb-2 min-h-[2rem]">
-              {form.zones.map(z => (
-                <span key={z} className="badge bg-gold-500/10 text-gold-500 border border-gold-500/30 capitalize gap-1">
-                  <MapPin size={10} /> {z}
-                  <button type="button" onClick={() => removeZone(z)} className="hover:text-danger-500"><X size={11} /></button>
-                </span>
-              ))}
-              {form.zones.length === 0 && <span className="text-xs text-text-muted">Aucune zone — ce livreur ne sera pas auto-attribué</span>}
-            </div>
-            <div className="flex gap-2">
-              <input className="input flex-1" placeholder="Ajouter une ville…" value={zoneInput}
-                onChange={e => setZoneInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addZone(zoneInput) } }} />
-              <button type="button" onClick={() => addZone(zoneInput)} className="btn-secondary"><Plus size={14} /> Ajouter</button>
-            </div>
-            {villes.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                <span className="text-[10px] text-text-muted mr-1">Suggestions :</span>
-                {villes.filter(v => !form.zones.includes(v.nom.toLowerCase())).slice(0, 6).map(v => (
-                  <button key={v.id} type="button" onClick={() => addZone(v.nom)} className="text-[10px] px-2 py-0.5 rounded-md bg-bg-hover text-text-secondary hover:bg-gold-500/10 hover:text-gold-500 transition capitalize">{v.nom}</button>
-                ))}
-              </div>
-            )}
-            <p className="text-xs text-text-muted mt-2 flex items-center gap-1.5"><MapPin size={12} /> Les colis destinés à ces villes seront automatiquement attribués à ce livreur.</p>
-          </div>
+          <div><label className="label">Plaque</label><input className="input" value={form.plaque} onChange={e => setForm(s => ({ ...s, plaque: e.target.value }))} /></div>
+          <div><label className="label">Zones (villes séparées par virgule)</label><input className="input" value={form.zones} onChange={e => setForm(s => ({ ...s, zones: e.target.value }))} /></div>
           <div><label className="label">Statut</label><select className="input" value={form.statut} onChange={e => setForm(s => ({ ...s, statut: e.target.value as Livreur['statut'] }))}>
             {Object.entries(LIVREUR_STATUT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select></div>
-          <div><label className="label">Type de commission</label><select className="input" value={form.type_commission} onChange={e => setForm(s => ({ ...s, type_commission: e.target.value as Livreur['type_commission'], valeur_commission: e.target.value === 'PORT' ? '0' : s.valeur_commission }))}>
+          <div><label className="label">Date d'embauche</label><input type="date" className="input" value={form.date_embauche} onChange={e => setForm(s => ({ ...s, date_embauche: e.target.value }))} /></div>
+          <div><label className="label">Type de commission</label><select className="input" value={form.type_commission} onChange={e => setForm(s => ({ ...s, type_commission: e.target.value as Livreur['type_commission'] }))}>
             {Object.entries(COMMISSION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-          {form.type_commission === 'PORT' && <p className="text-[11px] text-text-muted mt-1">Le livreur reçoit automatiquement les frais de livraison de chaque colis livré.</p>}
-          </div>
-          <div><label className="label">Commission par colis (montant)</label><input type="number" step="0.01" className="input" value={form.valeur_commission} onChange={e => setForm(s => ({ ...s, valeur_commission: e.target.value }))} disabled={form.type_commission === 'AUCUNE' || form.type_commission === 'PORT'} /></div>
+          </select></div>
+          <div><label className="label">Valeur commission (montant ou %)</label><input type="number" step="0.01" className="input" value={form.valeur_commission} onChange={e => setForm(s => ({ ...s, valeur_commission: e.target.value }))} /></div>
           <div className="col-span-2"><label className="label">Notes</label><textarea className="input" value={form.notes} onChange={e => setForm(s => ({ ...s, notes: e.target.value }))} /></div>
         </div>
       </Modal>

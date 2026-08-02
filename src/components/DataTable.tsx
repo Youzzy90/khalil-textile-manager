@@ -65,7 +65,7 @@ export function DataTable<T>({
                     {c.sortValue && (
                       sort?.key === c.key
                         ? (sort.dir === 'asc' ? <ArrowUp size={12} className="text-gold-500" /> : <ArrowDown size={12} className="text-gold-500" />)
-                        : <ArrowUpDown size={12} className="opacity-30" />
+                        : <ArrowUpDown size={12} className="opacity-40" />
                     )}
                   </div>
                 </th>
@@ -74,14 +74,14 @@ export function DataTable<T>({
           </thead>
           <tbody>
             {pageRows.length === 0 ? (
-              <tr><td colSpan={columns.length} className="td text-center text-text-muted py-16">{emptyMessage}</td></tr>
+              <tr><td colSpan={columns.length} className="td text-center text-text-muted py-12">{emptyMessage}</td></tr>
             ) : (
               pageRows.map(row => (
                 <tr key={rowKey(row)}
                     onClick={() => onRowClick?.(row)}
-                    className={`table-row group ${onRowClick ? 'cursor-pointer' : ''}`}>
+                    className={`table-row ${onRowClick ? 'cursor-pointer' : ''}`}>
                   {columns.map(c => (
-                    <td key={c.key} className={`td ${c.className ?? ''} group-hover:text-text-primary`}>{c.render(row)}</td>
+                    <td key={c.key} className={`td ${c.className ?? ''}`}>{c.render(row)}</td>
                   ))}
                 </tr>
               ))
@@ -90,14 +90,14 @@ export function DataTable<T>({
         </table>
       </div>
       {sorted.length > pageSize && (
-        <div className="flex items-center justify-between px-4 py-3 text-sm text-text-secondary border-t border-border-soft">
-          <div className="text-xs">{(current * pageSize) + 1}–{Math.min((current + 1) * pageSize, sorted.length)} sur {sorted.length}</div>
+        <div className="flex items-center justify-between px-3 py-2.5 text-sm text-text-secondary">
+          <div>{(current * pageSize) + 1}–{Math.min((current + 1) * pageSize, sorted.length)} sur {sorted.length}</div>
           <div className="flex items-center gap-1">
             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={current === 0}
-              className="btn-ghost p-1.5 rounded-lg disabled:opacity-30"><ChevronLeft size={16} /></button>
-            <span className="px-3 py-1 font-mono text-xs rounded-md bg-bg-soft">Page {current + 1} / {totalPages}</span>
+              className="btn-ghost p-1.5 rounded-md disabled:opacity-40"><ChevronLeft size={16} /></button>
+            <span className="px-2 font-mono">Page {current + 1} / {totalPages}</span>
             <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={current >= totalPages - 1}
-              className="btn-ghost p-1.5 rounded-lg disabled:opacity-30"><ChevronRight size={16} /></button>
+              className="btn-ghost p-1.5 rounded-md disabled:opacity-40"><ChevronRight size={16} /></button>
           </div>
         </div>
       )}

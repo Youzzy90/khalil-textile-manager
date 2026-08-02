@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Save, Building2, Palette, Database, Trash2, Loader2, User, KeyRound } from 'lucide-react'
+import { Save, Building2, Palette, Database, Trash2, Loader2, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { logActivite } from '../lib/audit'
@@ -10,19 +10,15 @@ import { toast } from '../components/Toast'
 import type { Parametre, Ville } from '../types/db'
 
 export function ParametresPage() {
-  const { utilisateur, authUser, refreshUtilisateur } = useAuth()
-  const [tab, setTab] = useState<'profil' | 'entreprise' | 'apparence' | 'villes' | 'donnees'>('profil')
+  const { utilisateur } = useAuth()
+  const [tab, setTab] = useState<'entreprise' | 'apparence' | 'villes' | 'donnees'>('entreprise')
   const [params, setParams] = useState<Record<string, string>>({})
   const [villes, setVilles] = useState<Ville[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [savingProfile, setSavingProfile] = useState(false)
-  const [savingPassword, setSavingPassword] = useState(false)
   const [showReset, setShowReset] = useState(false)
   const [resetConfirm, setResetConfirm] = useState('')
   const [newVille, setNewVille] = useState({ nom: '', region: '', tarif_port: '0' })
-  const [profile, setProfile] = useState({ nom_complet: '', telephone: '', email: '' })
-  const [passwords, setPasswords] = useState({ nouveau: '', confirmer: '' })
 
   useEffect(() => { load() }, [])
 
@@ -36,49 +32,7 @@ export function ParametresPage() {
     ;((p.data as Parametre[]) ?? []).forEach(x => { map[x.cle] = x.valeur ?? '' })
     setParams(map)
     setVilles((v.data as Ville[]) ?? [])
-    if (utilisateur) {
-      setProfile({
-        nom_complet: utilisateur.nom_complet,
-        telephone: utilisateur.telephone ?? '',
-        email: authUser?.email ?? '',
-      })
-    }
     setLoading(false)
-  }
-
-  async function saveProfile() {
-    if (!utilisateur || !authUser) return
-    setSavingProfile(true)
-    try {
-      const { error: e1 } = await supabase.from('utilisateur').update({
-        nom_complet: profile.nom_complet,
-        telephone: profile.telephone || null,
-      }).eq('id', utilisateur.id)
-      if (e1) throw e1
-      if (profile.email !== authUser.email) {
-        const { error: e2 } = await supabase.auth.updateUser({ email: profile.email })
-        if (e2) throw e2
-      }
-      await logActivite(utilisateur, 'USER', 'PROFILE_EDIT', { type: 'utilisateur', id: utilisateur.id })
-      await refreshUtilisateur()
-      toast('success', 'Profil mis à jour.')
-    } catch (e: any) { toast('error', e.message ?? String(e)) }
-    finally { setSavingProfile(false) }
-  }
-
-  async function savePassword() {
-    if (!utilisateur) return
-    if (!passwords.nouveau || passwords.nouveau.length < 6) { toast('error', 'Le mot de passe doit contenir au moins 6 caractères.'); return }
-    if (passwords.nouveau !== passwords.confirmer) { toast('error', 'Les deux mots de passe ne correspondent pas.'); return }
-    setSavingPassword(true)
-    try {
-      const { error } = await supabase.auth.updateUser({ password: passwords.nouveau })
-      if (error) throw error
-      await logActivite(utilisateur, 'USER', 'PASSWORD_CHANGE', { type: 'utilisateur', id: utilisateur.id })
-      toast('success', 'Mot de passe modifié.')
-      setPasswords({ nouveau: '', confirmer: '' })
-    } catch (e: any) { toast('error', e.message ?? String(e)) }
-    finally { setSavingPassword(false) }
   }
 
   function set(k: string, v: string) { setParams(s => ({ ...s, [k]: v })) }
@@ -127,7 +81,6 @@ export function ParametresPage() {
 
       <div className="flex gap-1 border-b border-border mb-4">
         {[
-          { k: 'profil', l: 'Mon profil', icon: User },
           { k: 'entreprise', l: 'Entreprise', icon: Building2 },
           { k: 'apparence', l: 'Apparence', icon: Palette },
           { k: 'villes', l: 'Villes', icon: Building2 },
@@ -139,46 +92,6 @@ export function ParametresPage() {
           </button>
         ))}
       </div>
-
-      {tab === 'profil' && (
-        <div className="space-y-4">
-          <Card>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-gold-500/20 flex items-center justify-center text-gold-500 text-lg font-semibold">
-                {profile.nom_complet?.[0] ?? '?'}
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold">{profile.nom_complet || 'Administrateur'}</h3>
-                <p className="text-xs text-text-secondary">{utilisateur?.role === 'ADMIN' ? 'Administrateur' : 'Employé'} · @{utilisateur?.identifiant}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2"><label className="label">Nom complet</label><input className="input" value={profile.nom_complet} onChange={e => setProfile(s => ({ ...s, nom_complet: e.target.value }))} /></div>
-              <div><label className="label">Téléphone</label><input className="input" value={profile.telephone} onChange={e => setProfile(s => ({ ...s, telephone: e.target.value }))} /></div>
-              <div><label className="label">Email</label><input type="email" className="input" value={profile.email} onChange={e => setProfile(s => ({ ...s, email: e.target.value }))} /></div>
-            </div>
-            <div className="flex justify-end mt-3">
-              <button onClick={saveProfile} disabled={savingProfile} className="btn-primary">
-                {savingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Enregistrer le profil
-              </button>
-            </div>
-          </Card>
-
-          <Card>
-            <h3 className="text-sm font-semibold mb-1 flex items-center gap-2"><KeyRound size={15} className="text-gold-500" /> Changer le mot de passe</h3>
-            <p className="text-xs text-text-secondary mb-3">Choisissez un mot de passe d'au moins 6 caractères.</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="label">Nouveau mot de passe</label><input type="password" className="input" value={passwords.nouveau} onChange={e => setPasswords(s => ({ ...s, nouveau: e.target.value }))} /></div>
-              <div><label className="label">Confirmer</label><input type="password" className="input" value={passwords.confirmer} onChange={e => setPasswords(s => ({ ...s, confirmer: e.target.value }))} /></div>
-            </div>
-            <div className="flex justify-end mt-3">
-              <button onClick={savePassword} disabled={savingPassword} className="btn-secondary">
-                {savingPassword ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />} Modifier le mot de passe
-              </button>
-            </div>
-          </Card>
-        </div>
-      )}
 
       {tab === 'entreprise' && (
         <Card>

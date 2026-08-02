@@ -1,7 +1,6 @@
-import type { ColisStatut, MoyenPaiement, EcheancePaiement } from '../types/db'
+import type { ColisStatut, MoyenPaiement } from '../types/db'
 
 export const STATUT_LABELS: Record<ColisStatut, string> = {
-  BROUILLON: 'Brouillon',
   RECU: 'Reçu',
   EXPEDIE: 'Expédié',
   EN_LIVRAISON: 'En livraison',
@@ -11,7 +10,6 @@ export const STATUT_LABELS: Record<ColisStatut, string> = {
 }
 
 export const STATUT_COLORS: Record<ColisStatut, string> = {
-  BROUILLON: 'bg-bg-hover text-text-secondary border border-border border-dashed',
   RECU: 'bg-info-100/20 text-info-300 border border-info-500/30',
   EXPEDIE: 'bg-warning-100/20 text-warning-300 border border-warning-500/30',
   EN_LIVRAISON: 'bg-gold-100/20 text-gold-300 border border-gold-500/30',
@@ -26,11 +24,8 @@ export const MOYEN_LABELS: Record<MoyenPaiement, string> = {
   ORANGE_MONEY: 'Orange Money',
   CARTE: 'Carte bancaire',
   VIREMENT: 'Virement',
-}
-
-export const ECHEANCE_LABELS: Record<EcheancePaiement, string> = {
-  AVANCE: 'Payé en avance',
-  LIVRAISON: 'Payé à la livraison',
+  PORT_PAYE: 'Port payé (avance)',
+  A_LIVRAISON: 'À la livraison',
 }
 
 export const CATEGORIES_CHARGE: { value: string; label: string }[] = [
@@ -55,8 +50,8 @@ export const VEHICULE_LABELS: Record<string, string> = {
 }
 
 export const COMMISSION_LABELS: Record<string, string> = {
-  PORT: 'Frais de livraison (port)',
-  FIXE: 'Montant fixe par colis',
+  FIXE: 'Fixe par colis',
+  POURCENTAGE: 'Pourcentage',
   AUCUNE: 'Aucune',
 }
 
